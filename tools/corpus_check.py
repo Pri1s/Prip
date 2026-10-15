@@ -1,5 +1,6 @@
 """Phase 2 acceptance: every design in designs/ is complete, lints clean, passes its own
-reference test, and EQY can prove it equal to itself. Runs inside the container
+reference test, the grader proves it equivalent to itself, and the grader rejects each of its
+known-bad controls (designs/<name>/controls/*.v). Runs inside the container
 (see `make corpus-check`). Optional arguments limit the check to the named designs.
 """
 
@@ -11,28 +12,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+from grader.equiv import check_equivalence  # noqa: E402
 from grader.ref_runner import run_reference  # noqa: E402
 
 DESIGNS = ROOT / "designs"
 BUILD = ROOT / "build" / "corpus"
 REQUIRED_FILES = ("golden.v", "spec.md", "ref_test.py", "meta.json")
 FLOPS = "t:$dff t:$dffe t:$adff t:$adffe t:$sdff t:$sdffe t:$sdffce t:$dffsr t:$dffsre t:$aldff t:$aldffe"
-
-EQY_SELF = """\
-[gold]
-read_verilog {rtl}
-prep -top {top}
-memory_map
-
-[gate]
-read_verilog {rtl}
-prep -top {top}
-memory_map
-
-[strategy sat]
-use sat
-depth 10
-"""
 
 
 def run(cmd, log):
@@ -81,11 +67,20 @@ def check_design(d: Path) -> list[str]:
     if tests == 0 or failed:
         problems.append(f"reference test failed on golden ({failed} of {tests} failed)")
 
-    # Control run: EQY must prove the design equal to itself, or it can't grade patches to it.
-    (out / "self.eqy").write_text(EQY_SELF.format(rtl=rtl, top=top))
-    run(["eqy", "-f", str(out / "self.eqy"), "-d", str(out / "eqy_self")], out / "eqy.log")
-    if "DONE (PASS" not in (out / "eqy.log").read_text():
-        problems.append(f"EQY could not prove golden equal to itself (see {out / 'eqy.log'})")
+    # Control runs: the grader must prove golden equal to itself (it can grade patches to it),
+    # and must reject every known-bad control (it can still see bugs in this design).
+    r = check_equivalence(rtl, rtl, meta, out / "grade_self")
+    if r.verdict != "PASS":
+        problems.append(f"grader did not PASS golden vs itself: {r.verdict}: {r.reason}")
+    elif r.disagreement:
+        print(f"     note: eqy-sby says {r.eqy_sby} for golden vs itself")
+    controls = sorted((d / "controls").glob("*.v"))
+    if not controls:
+        problems.append("no known-bad controls in controls/")
+    for c in controls:
+        r = check_equivalence(rtl, c, meta, out / f"grade_control_{c.stem}", run_eqy=False)
+        if r.verdict != "FAIL":
+            problems.append(f"grader did not FAIL control {c.name}: {r.verdict}: {r.reason}")
 
     return problems
 

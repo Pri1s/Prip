@@ -1,0 +1,10 @@
+{
+  "name": "fifo",
+  "top": "fifo",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "compare": {
+    "rd_data": {"valid_when": "!empty"}
+  }
+}

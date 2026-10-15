@@ -1,4 +1,4 @@
-// Hand-edited copy of fifo.v: full asserts one entry early. EQY must reject this.
+// Hand-edited copy of fifo.v: full asserts one entry early. The grader must reject this.
 module fifo #(
     parameter WIDTH = 8,
     parameter AW    = 2

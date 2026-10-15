@@ -1,0 +1,14 @@
+{
+  "golden": "designs/token_bucket/golden.v",
+  "meta": "designs/token_bucket/meta.json",
+  "ref_design": "designs/token_bucket",
+  "special": {
+    "special_assume_false":   {"expect": "FAIL", "reason_contains": "forbidden construct"},
+    "special_anyseq":         {"expect": "FAIL", "reason_contains": "forbidden construct"},
+    "special_ifdef_formal":   {"expect": "FAIL", "reason_contains": "forbidden construct"},
+    "special_include_golden": {"expect": "FAIL", "reason_contains": "forbidden construct"},
+    "special_wrong_ports":    {"expect": "FAIL", "reason_contains": "interface mismatch"},
+    "special_syntax_error":   {"expect": "FAIL", "reason_contains": "does not elaborate"},
+    "special_helper_names":   {"expect": "PASS", "check_label": true}
+  }
+}
