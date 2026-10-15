@@ -1,0 +1,21 @@
+{
+  "name": "signal_light",
+  "top": "signal_light",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Miscellaneous/Others/traffic_light",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "durations red 10 / green 60 / yellow 5 -> 8 / 24 / 3 cycles",
+      "pedestrian cut-off: green above 10 -> 10 becomes above 4 -> 4",
+      "idle state and one-cycle-delayed light registers removed; lights decoded directly from state",
+      "8-bit clock output -> 5-bit remaining (cycles left after the current one)",
+      "asynchronous active-low reset -> synchronous active-high"
+    ]
+  }
+}

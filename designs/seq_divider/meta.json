@@ -1,0 +1,25 @@
+{
+  "name": "seq_divider",
+  "top": "seq_divider",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Arithmetic/Divider/radix2_div",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "width 8 -> 6 bits; latency 6 working cycles",
+      "division by zero defined: quotient all ones, remainder = dividend",
+      "new ready output; opn_valid/res_valid/res_ready renamed start/done/ack",
+      "packed 16-bit result split into quotient and remainder, only defined while done",
+      "datapath rewritten as a magnitude restoring divider with separate sign fix-up"
+    ]
+  },
+  "compare": {
+    "quotient":  {"valid_when": "done"},
+    "remainder": {"valid_when": "done"}
+  }
+}

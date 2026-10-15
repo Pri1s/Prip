@@ -1,0 +1,20 @@
+{
+  "name": "updown_count",
+  "top": "updown_count",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Control/Counter/up_down_counter",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "width 16 -> 8 bits",
+      "wrap-around at both ends -> saturates at 0 and at LIMIT = 200",
+      "new en (count enable), load and load_val inputs; loads above 200 clamp to 200",
+      "asynchronous reset -> synchronous active-high"
+    ]
+  }
+}

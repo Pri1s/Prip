@@ -1,0 +1,15 @@
+{
+  "name": "secded_decode",
+  "top": "secded_decode",
+  "kind": "combinational",
+  "clock": null,
+  "reset": null,
+  "origin": "original",
+  "source": null,
+  "source_license": null,
+  "disguise": {
+    "renamed": false,
+    "spec_rewritten": false,
+    "behavior_changes": []
+  }
+}

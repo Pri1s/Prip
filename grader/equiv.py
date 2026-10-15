@@ -31,7 +31,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-PROVE_TIMEOUT = 300  # seconds for the PDR proof
+PROVE_TIMEOUT = 60  # default seconds for the PDR proof; meta.json `prove_timeout` overrides it
 COVER_DEPTH = 20     # cycles the reachability check may search
 
 # Cells a patch must not contain: they would let it constrain or fake the proof.
@@ -185,9 +185,11 @@ def _run_eqy(top: str, work: Path, timeout: int) -> str:
     return m[-1] if m else "ERROR"
 
 
-def check_equivalence(gold_rtl, gate_rtl, meta: dict, work_dir, timeout=PROVE_TIMEOUT,
+def check_equivalence(gold_rtl, gate_rtl, meta: dict, work_dir, timeout=None,
                       run_eqy=True) -> Result:
-    """Grades gate_rtl against gold_rtl. Writes artifacts and result.json into work_dir."""
+    """Grades gate_rtl against gold_rtl. Writes artifacts and result.json into work_dir.
+    The proof timeout is `timeout` if given, else the design's `prove_timeout`, else PROVE_TIMEOUT."""
+    timeout = timeout or meta.get("prove_timeout", PROVE_TIMEOUT)
     gold_rtl, gate_rtl, work = Path(gold_rtl).resolve(), Path(gate_rtl).resolve(), Path(work_dir)
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -280,7 +282,7 @@ def main():
     ap.add_argument("--meta", help="meta.json (instead of --design)")
     ap.add_argument("--gate", required=True, help="patched RTL to grade")
     ap.add_argument("--work", required=True, help="output directory")
-    ap.add_argument("--timeout", type=int, default=PROVE_TIMEOUT)
+    ap.add_argument("--timeout", type=int, help=f"proof timeout (default: meta.json prove_timeout, else {PROVE_TIMEOUT})")
     ap.add_argument("--no-eqy", action="store_true", help="skip the EQY diagnostic")
     args = ap.parse_args()
     if args.design:

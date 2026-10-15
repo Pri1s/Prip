@@ -1,0 +1,15 @@
+{
+  "name": "rr_arbiter",
+  "top": "rr_arbiter",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "original",
+  "source": null,
+  "source_license": null,
+  "disguise": {
+    "renamed": false,
+    "spec_rewritten": false,
+    "behavior_changes": []
+  }
+}

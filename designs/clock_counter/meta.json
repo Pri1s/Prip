@@ -1,0 +1,20 @@
+{
+  "name": "clock_counter",
+  "top": "clock_counter",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Miscellaneous/Others/calendar",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "moduli 60 / 60 / 24 -> 10 / 6 / 12 (full cycle 86400 -> 720 ticks), kept deep on purpose",
+      "new run input pauses the clock",
+      "output widths 6 / 6 / 6 -> 4 / 3 / 4 bits",
+      "asynchronous reset -> synchronous active-high"
+    ]
+  }
+}

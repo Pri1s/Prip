@@ -1,0 +1,19 @@
+{
+  "name": "bcd_sum",
+  "top": "bcd_sum",
+  "kind": "combinational",
+  "clock": null,
+  "reset": null,
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Arithmetic/Adder/adder_bcd",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "one BCD digit -> two cascaded digits (8-bit packed operands)",
+      "new bad output flags any input digit above 9",
+      "sum and carry forced to 0 on invalid input (source left them undefined)"
+    ]
+  }
+}
