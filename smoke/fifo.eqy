@@ -1,0 +1,13 @@
+[gold]
+read_verilog fifo.v
+prep -top fifo
+memory_map
+
+[gate]
+read_verilog fifo_bad.v
+prep -top fifo
+memory_map
+
+[strategy sat]
+use sat
+depth 10
