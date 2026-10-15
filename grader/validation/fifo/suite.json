@@ -1,0 +1,12 @@
+{
+  "golden": "smoke/fifo.v",
+  "meta": "smoke/meta.json",
+  "ref_design": null,
+  "special": {
+    "special_never_valid": {
+      "expect": "INCONCLUSIVE",
+      "reason_contains": "unreached rd_data",
+      "meta_override": {"compare": {"rd_data": {"valid_when": "1'b0"}}}
+    }
+  }
+}

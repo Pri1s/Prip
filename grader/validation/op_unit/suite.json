@@ -1,0 +1,5 @@
+{
+  "golden": "designs/op_unit/golden.v",
+  "meta": "designs/op_unit/meta.json",
+  "ref_design": "designs/op_unit"
+}
