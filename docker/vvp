@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Replaces OSS CAD Suite's bin/vvp wrapper. The suite bundles its own cocotb build and
+# libpython; its wrapper puts those first on the library path and sets PYTHONHOME, which
+# shadows our pinned cocotb. Same invocation, but our cocotb libs come first.
+suite=/opt/oss-cad-suite
+loader=$(ls "$suite"/lib/ld-linux*.so* | head -1)
+exec "$loader" --inhibit-cache --inhibit-rpath "" \
+    --library-path "$(cocotb-config --lib-dir):$suite/lib" \
+    "$suite/libexec/vvp" "$@"

@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+sim_build/
+eqy_out*/
+*.log
+results.xml
+*.result.xml
+
+# VibeWise learning notes (local only)
+.vibe-wise/
