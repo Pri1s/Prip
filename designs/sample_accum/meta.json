@@ -1,0 +1,23 @@
+{
+  "name": "sample_accum",
+  "top": "sample_accum",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Arithmetic/Accumulator/accu",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "group size 4 -> 3 samples",
+      "every valid sample is taken (source's ready_add stall logic removed)",
+      "sum only defined while out_valid (source showed running partial sums)",
+      "asynchronous active-low reset -> synchronous active-high"
+    ]
+  },
+  "compare": {
+    "sum": {"valid_when": "out_valid"}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "pack_8to16",
+  "top": "pack_8to16",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Miscellaneous/Others/width_8to16",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "byte order swapped: first byte of a pair -> low half (source put it in the high half)",
+      "new waiting output shows a held first byte",
+      "asynchronous active-low reset -> synchronous active-high"
+    ]
+  }
+}

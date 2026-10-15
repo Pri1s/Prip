@@ -1,0 +1,19 @@
+{
+  "name": "rotate_shift",
+  "top": "rotate_shift",
+  "kind": "combinational",
+  "clock": null,
+  "reset": null,
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Memory/Shifter/barrel_shifter",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "right-only logical shift -> new left input selects direction",
+      "new rot input selects rotate instead of zero fill",
+      "24 instantiated 2:1 mux cells -> three conditional stages with bit reversal for left shifts"
+    ]
+  }
+}

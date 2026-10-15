@@ -1,0 +1,24 @@
+{
+  "name": "stack_buffer",
+  "top": "stack_buffer",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Memory/LIFO/LIFObuffer",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "depth 4 -> 6 entries (not a power of two)",
+      "single RW + EN controls -> separate push and pop, pop wins when both are high",
+      "storage no longer cleared on reset",
+      "new top output shows the top entry without popping (valid only while not empty)",
+      "dout holds the last popped value instead of going to X between pops"
+    ]
+  },
+  "compare": {
+    "top": {"valid_when": "!empty"}
+  }
+}

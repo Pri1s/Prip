@@ -1,0 +1,19 @@
+{
+  "name": "mag_compare",
+  "top": "mag_compare",
+  "kind": "combinational",
+  "clock": null,
+  "reset": null,
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Arithmetic/Comparator/comparator_4bit",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "width 4 -> 6 bits",
+      "new is_signed input selects signed two's-complement comparison",
+      "outputs renamed A_greater/A_equal/A_less -> gt/eq/lt; eq derived from the difference"
+    ]
+  }
+}

@@ -1,7 +1,12 @@
 """Phase 2 acceptance: every design in designs/ is complete, lints clean, passes its own
-reference test, the grader proves it equivalent to itself, and the grader rejects each of its
-known-bad controls (designs/<name>/controls/*.v). Runs inside the container
-(see `make corpus-check`). Optional arguments limit the check to the named designs.
+reference test, the grader proves it equivalent to itself, and both the grader and the
+reference test reject each of its known-bad controls (designs/<name>/controls/*.v).
+
+Proof times are reported, with a warning when one uses more than a quarter of the design's
+timeout (meta.json `prove_timeout`, default PROVE_TIMEOUT). Slow proofs are never a failure:
+deep designs are kept on purpose, and the warning says when to consider a higher timeout.
+Runs inside the container (see `make corpus-check`). Optional arguments limit the check to
+the named designs.
 """
 
 import json
@@ -12,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from grader.equiv import check_equivalence  # noqa: E402
+from grader.equiv import PROVE_TIMEOUT, check_equivalence  # noqa: E402
 from grader.ref_runner import run_reference  # noqa: E402
 
 DESIGNS = ROOT / "designs"
@@ -28,8 +33,8 @@ def run(cmd, log):
     return proc.returncode == 0
 
 
-def check_design(d: Path) -> list[str]:
-    """Returns a list of problems; empty means the design passed."""
+def check_design(d: Path, notes: list[str]) -> list[str]:
+    """Returns a list of problems; empty means the design passed. Appends report lines to notes."""
     missing = [f for f in REQUIRED_FILES if not (d / f).is_file()]
     if missing:
         return [f"missing {', '.join(missing)}"]
@@ -68,20 +73,35 @@ def check_design(d: Path) -> list[str]:
         problems.append(f"reference test failed on golden ({failed} of {tests} failed)")
 
     # Control runs: the grader must prove golden equal to itself (it can grade patches to it),
-    # and must reject every known-bad control (it can still see bugs in this design).
+    # and must reject every known-bad control (it can still see bugs in this design). The
+    # reference test must reject every control too, so it isn't vacuous.
+    timeout = meta.get("prove_timeout", PROVE_TIMEOUT)
+    timings = []
     r = check_equivalence(rtl, rtl, meta, out / "grade_self")
+    timings.append(("self", r))
     if r.verdict != "PASS":
         problems.append(f"grader did not PASS golden vs itself: {r.verdict}: {r.reason}")
     elif r.disagreement:
-        print(f"     note: eqy-sby says {r.eqy_sby} for golden vs itself")
+        notes.append(f"note: eqy-sby says {r.eqy_sby} for golden vs itself")
     controls = sorted((d / "controls").glob("*.v"))
     if not controls:
         problems.append("no known-bad controls in controls/")
     for c in controls:
         r = check_equivalence(rtl, c, meta, out / f"grade_control_{c.stem}", run_eqy=False)
+        timings.append((c.stem, r))
         if r.verdict != "FAIL":
             problems.append(f"grader did not FAIL control {c.name}: {r.verdict}: {r.reason}")
+        tests, failed = run_reference(d, c, out / f"sim_control_{c.stem}")
+        if not failed:
+            problems.append(f"reference test did not fail control {c.name}")
 
+    shown = ", ".join(f"{name} {r.elapsed_s:.1f}s" + (f" (cex step {r.cex_step})" if r.cex_step else "")
+                      for name, r in timings if r.elapsed_s is not None)
+    notes.append(f"proofs (timeout {timeout}s): {shown or 'none ran'}")
+    slow = [name for name, r in timings if r.elapsed_s is not None and r.elapsed_s > timeout / 4]
+    if slow:
+        notes.append(f"WARNING: {', '.join(slow)} used over 1/4 of the {timeout}s timeout; "
+                     "consider raising prove_timeout")
     return problems
 
 
@@ -89,10 +109,13 @@ def main():
     names = sys.argv[1:] or sorted(p.name for p in DESIGNS.iterdir() if p.is_dir())
     failures = 0
     for name in names:
-        problems = check_design(DESIGNS / name)
+        notes = []
+        problems = check_design(DESIGNS / name, notes)
         print(f"{'ok  ' if not problems else 'FAIL'} {name}")
         for p in problems:
             print(f"     - {p}")
+        for n in notes:
+            print(f"     {n}")
         failures += bool(problems)
     print(f"\n{len(names) - failures}/{len(names)} designs passed")
     sys.exit(1 if failures else 0)

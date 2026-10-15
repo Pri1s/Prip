@@ -1,0 +1,5 @@
+{
+  "golden": "designs/seq_divider/golden.v",
+  "meta": "designs/seq_divider/meta.json",
+  "ref_design": "designs/seq_divider"
+}

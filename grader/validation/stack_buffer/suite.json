@@ -1,0 +1,5 @@
+{
+  "golden": "designs/stack_buffer/golden.v",
+  "meta": "designs/stack_buffer/meta.json",
+  "ref_design": "designs/stack_buffer"
+}
