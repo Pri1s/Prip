@@ -1,0 +1,22 @@
+{
+  "name": "op_unit",
+  "top": "op_unit",
+  "kind": "combinational",
+  "clock": null,
+  "reset": null,
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Miscellaneous/RISC-V/alu",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "width 32 -> 16 bits",
+      "6-bit MIPS opcodes -> dense 4-bit select; JR, SLLV/SRLV/SRAV dropped",
+      "shifts move x by y[3:0] (original shifted b by a)",
+      "LUI -> LDH (low byte of y into high byte)",
+      "carry/overflow/negative now defined (undriven in source); unused selects give 0 instead of high-Z",
+      "SLT/SLTU flag output removed; result carries the comparison"
+    ]
+  }
+}
