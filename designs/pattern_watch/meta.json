@@ -1,0 +1,19 @@
+{
+  "name": "pattern_watch",
+  "top": "pattern_watch",
+  "kind": "sequential",
+  "clock": "clk",
+  "reset": {"port": "rst", "active": "high", "sync": true},
+  "origin": "RTLLM",
+  "source": "https://github.com/hkust-zhiyao/RTLLM/tree/main/Control/Finite%20State%20Machine/sequence_detector",
+  "source_license": "MIT",
+  "disguise": {
+    "renamed": true,
+    "spec_rewritten": true,
+    "behavior_changes": [
+      "detected pattern 1001 -> 1101",
+      "one-hot 5-bit state encoding -> 3-bit binary",
+      "asynchronous active-low reset -> synchronous active-high"
+    ]
+  }
+}
