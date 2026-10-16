@@ -1,7 +1,7 @@
 IMAGE ?= rtl-debug-agent:dev
 RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
 
-.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test
+.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -48,3 +48,7 @@ subset-check:
 # Unit tests for the mutation operators.
 mutator-test:
 	$(RUN) python -m pytest -q -p no:cacheprovider mutator/test_operators.py
+
+# Unit tests for how the grader reads SBY proof logs.
+grader-test:
+	$(RUN) python -m pytest -q -p no:cacheprovider grader/test_equiv.py

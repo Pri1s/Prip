@@ -8,7 +8,8 @@ rename or re-encode internal state.
 
 Verdicts:
   PASS          PDR proved equivalence, and the reachability check showed the proof isn't vacuous
-  FAIL          PDR found a counterexample from reset, or the patch is invalid (doesn't
+  FAIL          PDR found a counterexample from reset (even if SBY then failed to write its
+                trace), or the patch is invalid (doesn't
                 elaborate, wrong ports, a clock or clock edge golden doesn't use, forbidden
                 constructs)
   INCONCLUSIVE  timeout, unknown, or an unreachable reset/validity condition; earns no credit
@@ -78,6 +79,19 @@ def _run(cmd, cwd, log: Path, timeout):
 def _sby_status(log_text):
     m = re.findall(r"DONE \((PASS|FAIL|UNKNOWN|TIMEOUT|ERROR)", log_text)
     return m[-1] if m else "ERROR"
+
+
+def _prove_status(log_text):
+    """SBY status of the PDR proof, plus FAIL_NO_TRACE: PDR found a counterexample, then SBY
+    crashed turning it into a trace. Seen with patches that read an out-of-range bit: the AIGER
+    model PDR proves on and the SMT2 model the trace is replayed on treat the undefined bit
+    differently. The proof result stands; only the explanation is lost. Any other crash, including
+    one inside PDR itself, stays ERROR."""
+    status = _sby_status(log_text)
+    if (status == "ERROR" and "engine_0 (abc pdr) returned FAIL" in log_text
+            and "engine_0 did not produce any traces" in log_text):
+        return "FAIL_NO_TRACE"
+    return status
 
 
 def prepare(rtl: Path, top: str, name: str, out: Path) -> dict:
@@ -267,7 +281,7 @@ def _grade(gold_rtl, gate_rtl, meta, work, timeout, run_eqy) -> Result:
     start = time.monotonic()
     rc, text = _run(["sby", "-f", "prove.sby"], work, work / "prove.log", timeout + 60)
     elapsed = round(time.monotonic() - start, 2)
-    status = "TIMEOUT" if rc is None else _sby_status(text)
+    status = "TIMEOUT" if rc is None else _prove_status(text)
 
     if status == "PASS":
         result = Result("PASS", "PDR proved all outputs equivalent from reset", elapsed_s=elapsed)
@@ -280,6 +294,9 @@ def _grade(gold_rtl, gate_rtl, meta, work, timeout, run_eqy) -> Result:
         result = Result("FAIL", f"counterexample from reset: {', '.join(outs) or 'output'} differs",
                         failing_outputs=outs, cex_step=step,
                         cex_trace=str(trace) if trace.exists() else None, elapsed_s=elapsed)
+    elif status == "FAIL_NO_TRACE":
+        result = Result("FAIL", "counterexample from reset; SBY could not write the trace, so the "
+                        "failing outputs and step are unknown", elapsed_s=elapsed)
     elif status in ("UNKNOWN", "TIMEOUT"):
         result = Result("INCONCLUSIVE", f"PDR {status.lower()}", elapsed_s=elapsed)
     else:

@@ -1,0 +1,8 @@
+{
+  "golden": "designs/secded_decode/golden.v",
+  "meta": "designs/secded_decode/meta.json",
+  "ref_design": "designs/secded_decode",
+  "special": {
+    "special_oob_read": {"expect": "FAIL", "reason_contains": "could not write the trace", "check_label": true}
+  }
+}
