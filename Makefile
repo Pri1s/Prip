@@ -1,7 +1,7 @@
 IMAGE ?= rtl-debug-agent:dev
 RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
 
-.PHONY: image shell smoke corpus-check grader-validate
+.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check mutator-test
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -24,3 +24,18 @@ corpus-check:
 # Limit to some suites with: make grader-validate SUITES="fifo op_unit"
 grader-validate:
 	$(RUN) python tools/validate_grader.py $(SUITES)
+
+# Phase 3a: mutate every golden design, keep only mutants the grader proves buggy (and that
+# simulation confirms), and write bugs/ (buggy RTL, manifest.jsonl answer key, REPORT.md).
+# Limit to some designs with: make bugs DESIGNS="token_bucket"
+bugs:
+	$(RUN) python mutator/generate.py $(DESIGNS)
+
+# Re-verifies the committed bug pool: hashes, exact reversible edits, opaque IDs, every bug still
+# FAILs, golden and sample equivalent rewrites PASS.
+bugs-check:
+	$(RUN) python tools/bugs_check.py $(DESIGNS)
+
+# Unit tests for the mutation operators.
+mutator-test:
+	$(RUN) python -m pytest -q -p no:cacheprovider mutator/test_operators.py
