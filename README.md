@@ -19,7 +19,7 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 2 | Design corpus: 15 Verilog-2005 designs with specs, reference tests, known-bad controls | Done |
 | 4a | Formal equivalence grader (whole-design miter, PDR) + validation set | Done |
 | 3a | Bug pool: source mutator, filtered by the grader and checked in simulation | Done |
-| 3b | Choose the evaluation subset from the pool | Next |
+| 3b | Frozen 180-bug eval set + 30-bug dev set, stratified by kind and depth | Done |
 | 4b | Grading flow: hidden reference testbench + bug-line localization check | Planned |
 | 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch` | Planned |
 | 6 | Agent, single-shot baseline, parallel eval runner | Planned |
@@ -36,6 +36,8 @@ make corpus-check     # every design lints, passes its reference test, self-prov
 make grader-validate  # labeled buggy/equivalent variants must all get the expected verdict
 make bugs             # Phase 3a: regenerate the bug pool in bugs/ (about 20 min)
 make bugs-check       # re-verify every committed bug against the current golden designs
+make subset           # Phase 3b: select the eval/dev sets (refuses to replace a frozen eval set without FORCE=1)
+make subset-check     # re-verify the eval/dev sets: quotas, caps, disjoint, reproducible
 make mutator-test     # unit tests for the mutation operators
 make shell            # interactive shell in the container, repo mounted at /work
 ```
@@ -124,7 +126,7 @@ Clock-edge (`posedge`↔`negedge`) and port mutations are not generated.
 Current pool: 1,257 candidates → **1,056 accepted** (662 sequential, 394 combinational), 119
 equivalent (10%), 63 stillborn, 19 rejected for simulation/synthesis disagreement or a grader
 error. The reference test misses 2 accepted bugs. See [bugs/REPORT.md](bugs/REPORT.md) for the
-per-design funnel and family × depth counts. Phase 3b chooses the evaluation subset.
+per-design funnel and family × depth counts.
 
 Per bug, `bugs/manifest.jsonl` (answer key, never shown to the agent) records the operator,
 family, exact edit, localization lines (for deletions: the line where code is missing and its
@@ -132,6 +134,18 @@ enclosing block), minimum depth, OSDD, failing outputs, simulation and reference
 design size, and hashes. Bug IDs are opaque (`token_bucket_07`); the agent gets only the buggy
 file (as `<top>.v`) and `spec.md`. `make bugs-check` re-verifies every bug against the current
 golden designs.
+
+## Evaluation subset (Phase 3b)
+
+`make subset` picks a frozen **eval set of 180 bugs** and a disjoint **dev set of 30** (for
+building and tuning prompts; reported results come only from the eval set). Strata follow the
+research question, bug depth: 54 combinational (depth 0) and 42 each of sequential depth 1–2,
+3–5 and 6+ (70% sequential). Within a stratum the quota is spread over designs as evenly as their
+bug counts allow (so `seq_divider`, with 126 of the 274 deep bugs, can't dominate), and
+`wrong_signal` is at most a third of each design's picks. Families are reported, not given
+quotas. Selection is seeded and reproducible; `make subset-check` verifies it. See
+[bugs/SUBSET.md](bugs/SUBSET.md), which also records the Phase 6 protocol (3 runs per bug,
+McNemar's test for agent vs baseline).
 
 ## Repository layout
 
