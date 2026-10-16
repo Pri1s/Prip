@@ -1,7 +1,7 @@
 IMAGE ?= rtl-debug-agent:dev
 RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
 
-.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test
+.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -49,6 +49,13 @@ subset-check:
 mutator-test:
 	$(RUN) python -m pytest -q -p no:cacheprovider mutator/test_operators.py
 
-# Unit tests for how the grader reads SBY proof logs.
+# Unit tests for the grader: reading SBY proof logs, combining the formal verdict with the
+# reference test, scoring localization, and the patch source rules.
 grader-test:
-	$(RUN) python -m pytest -q -p no:cacheprovider grader/test_equiv.py
+	$(RUN) python -m pytest -q -p no:cacheprovider grader/test_equiv.py grader/test_grade.py
+
+# Phase 4b: the full grading flow (formal proof + hidden reference test + localization) on every
+# eval and dev bug: the golden repair PASSes with an exact line, the unchanged bug FAILs, correct
+# rewrites PASS, and patches PDR proves equivalent but simulation rejects FAIL.
+grade-check:
+	$(RUN) python tools/grade_check.py

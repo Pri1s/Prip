@@ -11,7 +11,7 @@ Verdicts:
   FAIL          PDR found a counterexample from reset (even if SBY then failed to write its
                 trace), or the patch is invalid (doesn't
                 elaborate, wrong ports, a clock or clock edge golden doesn't use, forbidden
-                constructs)
+                constructs such as `include or file-access system tasks)
   INCONCLUSIVE  timeout, unknown, or an unreachable reset/validity condition; earns no credit
   ERROR         the grader itself broke (e.g. golden failed to elaborate); rerun, don't score
 
@@ -43,7 +43,14 @@ FORMAL_CELLS = {"$check", "$assert", "$assume", "$cover", "$live", "$fair", "$an
 # time, and conditional compilation could behave differently under formal (FORMAL/SYNTHESIS
 # defines) than in simulation.
 FORBIDDEN_DIRECTIVE = re.compile(r"`(include|ifdef|ifndef|elsif)\b")
-COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
+# System tasks a patch must not use: the hidden reference test simulates the patch inside the
+# grading environment, where file access could read the answer key or overwrite the test's own
+# results file. ($display and friends only print, so they stay allowed.)
+FORBIDDEN_TASK = re.compile(r"(?<![\w$])(\$(?:fopen|fclose|fdisplay\w*|fwrite\w*|fstrobe\w*|fmonitor\w*|"
+                            r"fgetc|fgets|fscanf|fread|fseek|ftell|frewind|fflush|ferror|feof|ungetc|"
+                            r"readmem\w*|writemem\w*|dump\w*|system|sdf_annotate))\b")
+# String literals and comments, matched in one pass so neither can hide the other.
+STRINGS_COMMENTS = re.compile(r'"(?:\\.|[^"\\\n])*"|//[^\n]*|/\*.*?\*/', re.S)
 # valid_when tokens: Verilog number literals pass through, identifiers must be port names.
 TOKEN = re.compile(r"\d*'[sS]?[bodhBODH][0-9a-fA-F_xXzZ?]+|\d+|[A-Za-z_][A-Za-z0-9_$]*")
 
@@ -125,11 +132,15 @@ def clocking(netlist: dict) -> set[tuple[str, int]]:
     return pairs
 
 
-def _check_patch_source(rtl: Path):
-    """Returns a reason string if the patch uses forbidden directives, else None."""
-    text = COMMENTS.sub("", rtl.read_text(errors="replace"))
-    m = FORBIDDEN_DIRECTIVE.search(text)
-    return f"forbidden construct: `{m.group(1)}" if m else None
+def check_patch_source(rtl: Path):
+    """Returns a reason string if the patch uses forbidden directives or system tasks, else None."""
+    text = STRINGS_COMMENTS.sub(lambda m: '""' if m.group(0)[0] == '"' else " ",
+                                Path(rtl).read_text(errors="replace"))
+    if m := FORBIDDEN_DIRECTIVE.search(text):
+        return f"forbidden construct: `{m.group(1)}"
+    if m := FORBIDDEN_TASK.search(text):
+        return f"forbidden construct: {m.group(1)}"
+    return None
 
 
 def _gold_expr(expr: str, inputs, outputs) -> str:
@@ -238,7 +249,7 @@ def _grade(gold_rtl, gate_rtl, meta, work, timeout, run_eqy) -> Result:
         raise GraderError(f"golden design contains formal cells {sorted(bad)}")
 
     # The patch: source rules, elaboration, formal cells, interface.
-    if reason := _check_patch_source(gate_rtl):
+    if reason := check_patch_source(gate_rtl):
         return Result("FAIL", reason)
     try:
         gate = prepare(gate_rtl, top, "gate", work)

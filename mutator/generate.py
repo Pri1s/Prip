@@ -38,6 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from grader.equiv import _sby_file, _sby_status, check_equivalence  # noqa: E402
+from grader.ref_runner import run_reference_isolated  # noqa: E402
 from mutator.operators import Design, FAMILY, Mutation, enumerate_mutations, localization  # noqa: E402
 from mutator.simcheck import check_in_simulation, osdd, read_witness  # noqa: E402
 from tools.corpus_check import FLOPS  # noqa: E402
@@ -82,12 +83,8 @@ def lint(rtl: Path, meta: dict, out: Path) -> str | None:
 
 def run_reference(design_dir: Path, rtl: Path, out: Path) -> tuple[int, int]:
     """The hidden reference test in a subprocess, so a hung simulation can be timed out."""
-    code = ("import json, sys; sys.path.insert(0, sys.argv[4]); from grader.ref_runner import run_reference; "
-            "print('REF_RESULT ' + json.dumps(run_reference(sys.argv[1], sys.argv[2], sys.argv[3])))")
-    rc, text = _run([sys.executable, "-c", code, str(design_dir), str(rtl), str(out), str(ROOT)],
-                    out.parent, out.parent / "ref.log", REF_TIMEOUT)
-    m = re.findall(r"REF_RESULT \[(\d+), (\d+)\]", text)
-    return (int(m[-1][0]), int(m[-1][1])) if m else (1, 1)   # crash or hang = the test fails
+    r = run_reference_isolated(design_dir, rtl, out, REF_TIMEOUT)
+    return r["tests"], r["failed"]   # crash or hang = the test fails
 
 
 def min_depth(work: Path, pdr_step: int) -> dict:
