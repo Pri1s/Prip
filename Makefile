@@ -1,7 +1,7 @@
 IMAGE ?= rtl-debug-agent:dev
 RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
 
-.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check mutator-test
+.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -35,6 +35,15 @@ bugs:
 # FAILs, golden and sample equivalent rewrites PASS.
 bugs-check:
 	$(RUN) python tools/bugs_check.py $(DESIGNS)
+
+# Phase 3b: pick the frozen eval set (180 bugs, stratified by kind and depth) and a disjoint
+# 30-bug dev set from the pool. Refuses to replace an existing eval set unless FORCE=1.
+subset:
+	$(RUN) python mutator/subset.py $(if $(FORCE),--force)
+
+# Re-verifies the eval/dev sets: pool unchanged, quotas and caps, disjoint, reproducible.
+subset-check:
+	$(RUN) python tools/subset_check.py
 
 # Unit tests for the mutation operators.
 mutator-test:
