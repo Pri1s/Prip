@@ -20,7 +20,7 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 4a | Formal equivalence grader (whole-design miter, PDR) + validation set | Done |
 | 3a | Bug pool: source mutator, filtered by the grader and checked in simulation | Done |
 | 3b | Frozen 180-bug eval set + 30-bug dev set, stratified by kind and depth | Done |
-| 4b | Grading flow: hidden reference testbench + bug-line localization check | Planned |
+| 4b | Grading flow: hidden reference testbench + bug-line localization check | Done |
 | 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch` | Planned |
 | 6 | Agent, single-shot baseline, parallel eval runner | Planned |
 | 7 | Waveform summarizer (Python prototype, then C++) | Planned |
@@ -39,7 +39,8 @@ make bugs-check       # re-verify every committed bug against the current golden
 make subset           # Phase 3b: select the eval/dev sets (refuses to replace a frozen eval set without FORCE=1)
 make subset-check     # re-verify the eval/dev sets: quotas, caps, disjoint, reproducible
 make mutator-test     # unit tests for the mutation operators
-make grader-test      # unit tests for how the grader reads SBY proof logs
+make grader-test      # unit tests: SBY log reading, verdict combination, localization scoring, patch rules
+make grade-check      # Phase 4b: full grading flow on every eval/dev bug, correct rewrites, sim-broken patches
 make shell            # interactive shell in the container, repo mounted at /work
 ```
 
@@ -64,7 +65,7 @@ Limit checks to a subset with `make corpus-check DESIGNS="op_unit token_bucket"`
 | Verdict | Meaning |
 |---------|---------|
 | PASS | Equivalence proved, and the proof is non-vacuous |
-| FAIL | Counterexample from reset (also when SBY then fails to write the trace, e.g. a patch reading an out-of-range bit), or the patch is invalid (doesn't elaborate, wrong ports, a clock or clock edge golden doesn't use, formal cells, `` `include ``/`` `ifdef ``) |
+| FAIL | Counterexample from reset (also when SBY then fails to write the trace, e.g. a patch reading an out-of-range bit), or the patch is invalid (doesn't elaborate, wrong ports, a clock or clock edge golden doesn't use, formal cells, `` `include ``/`` `ifdef ``, file-access system tasks such as `$fopen`/`$readmemh`) |
 | INCONCLUSIVE | Timeout or unknown; earns no credit, reported separately from FAIL |
 | ERROR | The grader itself broke (including a crash inside PDR); rerun, don't score |
 
@@ -76,6 +77,40 @@ Grade a file by hand inside the container:
 
 ```bash
 python -m grader.equiv --design designs/token_bucket --gate patch.v --work build/grade/x
+```
+
+## Scoring a submission (Phase 4b)
+
+`grader/grade.py` scores one run for one bug. Repair and localization are scored **separately**:
+an agent can find the right line and still fail to fix it, or fix the bug without pinpointing it.
+
+**Repair** needs both checks to pass. The hidden reference test (`ref_test.py`) runs on the patch
+alongside the formal proof, because a patch can be formally equivalent and still behave differently
+in an event-driven simulator (e.g. token_bucket's `<=` → `=` change, or an `always @*` block that
+never settles).
+
+| Formal (PDR) | Reference test | Repair verdict |
+|--------------|----------------|----------------|
+| PASS | passes | **PASS** |
+| PASS | fails, crashes, or times out (60 s) | FAIL |
+| FAIL | any | FAIL |
+| INCONCLUSIVE / ERROR | fails | FAIL |
+| INCONCLUSIVE / ERROR | passes | INCONCLUSIVE / ERROR (no credit) |
+
+Both raw results are kept in `grade.json`. A patch rejected by the source rules is never simulated.
+
+**Localization**: the agent claims one line, numbered as in the **original buggy file** it was
+given (not its edited copy).
+
+| Field | Counts when the claimed line is |
+|-------|---------------------------------|
+| `exact` (headline metric) | the edited line; for a deletion, the line just before or just after the missing code (blank lines and comments skipped) |
+| `block` (reported separately) | inside the enclosing block from the manifest; every exact hit is also a block hit |
+
+No claimed line, or one outside the file, scores false on both.
+
+```bash
+python -m grader.grade --bug token_bucket_07 --patch patch.v --line 24 --work build/grade/x
 ```
 
 ## Design corpus
@@ -154,8 +189,8 @@ McNemar's test for agent vs baseline).
 ```
 docker/        Dockerfile and vvp wrapper (keeps pinned cocotb ahead of the suite's bundled copy)
 designs/       benchmark corpus (see above); THIRD_PARTY.md has the RTLLM license
-grader/        equiv.py (formal grader), ref_runner.py (reference test runner), validation/ suites
-tools/         corpus_check.py, validate_grader.py, bugs_check.py
+grader/        grade.py (scores a submission), equiv.py (formal grader), ref_runner.py (reference test runner), validation/ suites
+tools/         corpus_check.py, validate_grader.py, bugs_check.py, subset_check.py, grade_check.py
 smoke/         FIFO, two hand-edited bad FIFOs, cocotb test, run.sh
 docs/research/ notes on RTL bug taxonomies, bug depth vs difficulty, and contamination
 mutator/       mutation operators (pyslang), simulation checks, bug-pool generator
@@ -168,7 +203,9 @@ agent/         placeholder for Phase 6
 The answer key (golden RTL, reference tests, bug manifest) exists only in the grader
 environment. The agent works on a fresh copy of the buggy RTL and spec, and any tool that
 runs agent-written code does so in a no-network container. Each run ends with one
-`submit_patch`; grading happens afterwards.
+`submit_patch`; grading happens afterwards. The claimed buggy line refers to the original buggy file, so the
+workspace will also keep a read-only copy of it: an agent that has edited its working copy can
+still look up the original line numbers.
 
 ## License
 
