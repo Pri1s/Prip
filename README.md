@@ -18,7 +18,8 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 1 | Docker toolchain (OSS CAD Suite + cocotb) with FIFO smoke test | Done |
 | 2 | Design corpus: 15 Verilog-2005 designs with specs, reference tests, known-bad controls | Done |
 | 4a | Formal equivalence grader (whole-design miter, PDR) + validation set | Done |
-| 3 | Bug generator: source mutator filtered by the grader's miter | Next |
+| 3a | Bug pool: source mutator, filtered by the grader and checked in simulation | Done |
+| 3b | Choose the evaluation subset from the pool | Next |
 | 4b | Grading flow: hidden reference testbench + bug-line localization check | Planned |
 | 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch` | Planned |
 | 6 | Agent, single-shot baseline, parallel eval runner | Planned |
@@ -33,6 +34,9 @@ make image            # build the toolchain image (OSS CAD Suite 2026-10-01, Pyt
 make smoke            # Phase 1 check: FIFO cocotb test + grader PASS/FAIL controls
 make corpus-check     # every design lints, passes its reference test, self-proves, rejects its controls
 make grader-validate  # labeled buggy/equivalent variants must all get the expected verdict
+make bugs             # Phase 3a: regenerate the bug pool in bugs/ (about 20 min)
+make bugs-check       # re-verify every committed bug against the current golden designs
+make mutator-test     # unit tests for the mutation operators
 make shell            # interactive shell in the container, repo mounted at /work
 ```
 
@@ -57,7 +61,7 @@ Limit checks to a subset with `make corpus-check DESIGNS="op_unit token_bucket"`
 | Verdict | Meaning |
 |---------|---------|
 | PASS | Equivalence proved, and the proof is non-vacuous |
-| FAIL | Counterexample from reset, or the patch is invalid (doesn't elaborate, wrong ports, formal cells, `` `include ``/`` `ifdef ``) |
+| FAIL | Counterexample from reset, or the patch is invalid (doesn't elaborate, wrong ports, a clock or clock edge golden doesn't use, formal cells, `` `include ``/`` `ifdef ``) |
 | INCONCLUSIVE | Timeout or unknown; earns no credit, reported separately from FAIL |
 | ERROR | The grader itself broke; rerun, don't score |
 
@@ -94,16 +98,53 @@ Each `designs/<name>/` holds:
 | `meta.json` | No | Top, clock/reset, origin + license, disguise changes, `compare` masks, timeout |
 | `controls/*.v` | No | Hand-written buggy variants the grader and reference test must both reject |
 
+## Bug pool (Phase 3a)
+
+`make bugs` mutates each golden design one edit at a time (20 operators in three VeriBugBench
+families: Expression, Bit-vector & access, Assignment) and runs every mutant through the same gates:
+
+1. **Lint**: compiles under `iverilog -g2005`, synthesizes, no latches, still combinational/sequential.
+2. **Grader**: FAIL with a counterexample from reset continues; PASS means an equivalent mutant.
+3. **Depth**: BMC from reset finds the minimum counterexample depth (PDR's trace was longer on
+   22 bugs). If BMC can't finish in 60 s, the depth is stored as `[lower, upper]` bounds.
+4. **Simulation**: the counterexample is replayed in Icarus on golden vs mutant RTL, and the
+   mutant's RTL simulation must agree with simulation of its own synthesized netlist.
+5. **Reference test**: run and recorded as `reference_test_detected`; it is metadata, not a gate.
+
+| Grader | Simulation | Outcome |
+|--------|------------|---------|
+| FAIL | reference test fails | accepted |
+| FAIL | reference test passes, counterexample replays as an output mismatch | accepted, `reference_test_detected = false` |
+| FAIL | RTL and netlist disagree, or simulation never settles | rejected |
+| PASS | reference test or simulation fails | rejected, listed for investigation |
+| INCONCLUSIVE / ERROR | | rejected, counted in the report |
+
+Clock-edge (`posedge`↔`negedge`) and port mutations are not generated.
+
+Current pool: 1,257 candidates → **1,056 accepted** (662 sequential, 394 combinational), 119
+equivalent (10%), 63 stillborn, 19 rejected for simulation/synthesis disagreement or a grader
+error. The reference test misses 2 accepted bugs. See [bugs/REPORT.md](bugs/REPORT.md) for the
+per-design funnel and family × depth counts. Phase 3b chooses the evaluation subset.
+
+Per bug, `bugs/manifest.jsonl` (answer key, never shown to the agent) records the operator,
+family, exact edit, localization lines (for deletions: the line where code is missing and its
+enclosing block), minimum depth, OSDD, failing outputs, simulation and reference-test results,
+design size, and hashes. Bug IDs are opaque (`token_bucket_07`); the agent gets only the buggy
+file (as `<top>.v`) and `spec.md`. `make bugs-check` re-verifies every bug against the current
+golden designs.
+
 ## Repository layout
 
 ```
 docker/        Dockerfile and vvp wrapper (keeps pinned cocotb ahead of the suite's bundled copy)
 designs/       benchmark corpus (see above); THIRD_PARTY.md has the RTLLM license
 grader/        equiv.py (formal grader), ref_runner.py (reference test runner), validation/ suites
-tools/         corpus_check.py, validate_grader.py
+tools/         corpus_check.py, validate_grader.py, bugs_check.py
 smoke/         FIFO, two hand-edited bad FIFOs, cocotb test, run.sh
 docs/research/ notes on RTL bug taxonomies, bug depth vs difficulty, and contamination
-bugs/ agent/   placeholders for Phases 3 and 6
+mutator/       mutation operators (pyslang), simulation checks, bug-pool generator
+bugs/          generated bug pool: <design>/<id>.v, manifest.jsonl (answer key), candidates.jsonl, REPORT.md
+agent/         placeholder for Phase 6
 ```
 
 ## Isolation (planned for Phases 5–6)

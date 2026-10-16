@@ -9,7 +9,8 @@ rename or re-encode internal state.
 Verdicts:
   PASS          PDR proved equivalence, and the reachability check showed the proof isn't vacuous
   FAIL          PDR found a counterexample from reset, or the patch is invalid (doesn't
-                elaborate, wrong ports, forbidden constructs)
+                elaborate, wrong ports, a clock or clock edge golden doesn't use, forbidden
+                constructs)
   INCONCLUSIVE  timeout, unknown, or an unreachable reset/validity condition; earns no credit
   ERROR         the grader itself broke (e.g. golden failed to elaborate); rerun, don't score
 
@@ -96,6 +97,18 @@ def prepare(rtl: Path, top: str, name: str, out: Path) -> dict:
 
 def ports_of(netlist: dict) -> dict[str, tuple[str, int]]:
     return {n: (p["direction"], len(p["bits"])) for n, p in netlist["ports"].items()}
+
+
+def clocking(netlist: dict) -> set[tuple[str, int]]:
+    """Returns the (clock, edge) pairs the design's flip-flops use: clock is a port name (or
+    "internal" for a derived clock), edge is 1 for posedge and 0 for negedge."""
+    bit_names = {b: n for n, p in netlist["ports"].items() for b in p["bits"]}
+    pairs = set()
+    for cell in netlist["cells"].values():
+        if "CLK" in cell["connections"] and "CLK_POLARITY" in cell["parameters"]:
+            bit = cell["connections"]["CLK"][0]
+            pairs.add((bit_names.get(bit, "internal"), int(str(cell["parameters"]["CLK_POLARITY"]), 2)))
+    return pairs
 
 
 def _check_patch_source(rtl: Path):
@@ -223,6 +236,11 @@ def _grade(gold_rtl, gate_rtl, meta, work, timeout, run_eqy) -> Result:
     if gold_ports != gate_ports:
         diff = sorted(set(gold_ports.items()) ^ set(gate_ports.items()))
         return Result("FAIL", f"interface mismatch: {diff}")
+    # The proof steps every flip-flop once per cycle and doesn't model the clock wire, so it
+    # can't compare a patch clocked differently (e.g. negedge); SBY would just crash.
+    if extra := clocking(gate) - clocking(gold):
+        edges = ", ".join(f"{'posedge' if e else 'negedge'} {c}" for c, e in sorted(extra))
+        return Result("FAIL", f"clocking differs from golden: patch uses {edges}")
 
     try:
         miter, asserts, covers = build_miter(gold_ports, meta)
