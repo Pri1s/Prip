@@ -1,0 +1,8 @@
+{
+  "golden": "designs/mag_compare/golden.v",
+  "meta": "designs/mag_compare/meta.json",
+  "ref_design": "designs/mag_compare",
+  "special": {
+    "special_oob_read": {"expect": "FAIL", "reason_contains": "could not write the trace", "check_label": true}
+  }
+}

@@ -39,6 +39,7 @@ make bugs-check       # re-verify every committed bug against the current golden
 make subset           # Phase 3b: select the eval/dev sets (refuses to replace a frozen eval set without FORCE=1)
 make subset-check     # re-verify the eval/dev sets: quotas, caps, disjoint, reproducible
 make mutator-test     # unit tests for the mutation operators
+make grader-test      # unit tests for how the grader reads SBY proof logs
 make shell            # interactive shell in the container, repo mounted at /work
 ```
 
@@ -63,9 +64,9 @@ Limit checks to a subset with `make corpus-check DESIGNS="op_unit token_bucket"`
 | Verdict | Meaning |
 |---------|---------|
 | PASS | Equivalence proved, and the proof is non-vacuous |
-| FAIL | Counterexample from reset, or the patch is invalid (doesn't elaborate, wrong ports, a clock or clock edge golden doesn't use, formal cells, `` `include ``/`` `ifdef ``) |
+| FAIL | Counterexample from reset (also when SBY then fails to write the trace, e.g. a patch reading an out-of-range bit), or the patch is invalid (doesn't elaborate, wrong ports, a clock or clock edge golden doesn't use, formal cells, `` `include ``/`` `ifdef ``) |
 | INCONCLUSIVE | Timeout or unknown; earns no credit, reported separately from FAIL |
-| ERROR | The grader itself broke; rerun, don't score |
+| ERROR | The grader itself broke (including a crash inside PDR); rerun, don't score |
 
 EQY (`sby` strategy) also runs as a diagnostic only. It never changes the verdict; its
 partitioned check is stricter than reset-reachable equivalence and wrongly fails many correct
@@ -125,7 +126,8 @@ Clock-edge (`posedge`↔`negedge`) and port mutations are not generated.
 
 Current pool: 1,257 candidates → **1,056 accepted** (662 sequential, 394 combinational), 119
 equivalent (10%), 63 stillborn, 19 rejected for simulation/synthesis disagreement or a grader
-error. The reference test misses 2 accepted bugs. See [bugs/REPORT.md](bugs/REPORT.md) for the
+error (the 2 grader errors were out-of-range bit reads, which the grader now scores as FAIL; they
+stay out of the pool because they have no counterexample trace to measure). The reference test misses 2 accepted bugs. See [bugs/REPORT.md](bugs/REPORT.md) for the
 per-design funnel and family × depth counts.
 
 Per bug, `bugs/manifest.jsonl` (answer key, never shown to the agent) records the operator,
