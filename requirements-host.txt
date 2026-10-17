@@ -1,0 +1,3 @@
+# Host side (outside Docker): the MCP tool server and its tests. Python >= 3.11.
+mcp==2.3.0
+pytest==9.1.1

@@ -1,7 +1,10 @@
 IMAGE ?= rtl-debug-agent:dev
 RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
+# The tool server (and later the agent loop) runs on the host, outside the sandbox.
+HOST_PY ?= .venv/bin/python
 
-.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check
+.PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check \
+        host-venv tools-test tools-check
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -59,3 +62,17 @@ grader-test:
 # rewrites PASS, and patches PDR proves equivalent but simulation rejects FAIL.
 grade-check:
 	$(RUN) python tools/grade_check.py
+
+# Host-side Python environment for the tool server (MCP SDK) and its tests.
+host-venv:
+	python3 -m venv .venv
+	$(HOST_PY) -m pip install -q -r requirements-host.txt
+
+# Phase 5: tool-server tests against a real sandbox (escape attempts, timeouts, budget, MCP stdio).
+tools-test:
+	$(HOST_PY) -m pytest -q -p no:cacheprovider toolserver/test_toolserver.py
+
+# Phase 5 end to end: a scripted client drives the tool server over MCP on the 30 dev bugs
+# (golden fix and unchanged submissions), then the runs are graded in the container.
+tools-check:
+	$(HOST_PY) tools/tools_check.py
