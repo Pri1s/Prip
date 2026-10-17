@@ -108,6 +108,11 @@ class OpenRouter:
         self.post, self.timeout, self.wait_s = post, timeout, wait_s
         self.usage = Usage()
 
+    def fork(self, temperature: float | None = None, model: str | None = None) -> "OpenRouter":
+        """A client with the same settings (or another model / temperature) and its own usage totals."""
+        return OpenRouter(model or self.model, self.temperature if temperature is None else temperature,
+                          self.max_tokens, self.cache, post=self.post, timeout=self.timeout, wait_s=self.wait_s)
+
     def body(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
         msgs = copy.deepcopy(messages)
         if self.cache:

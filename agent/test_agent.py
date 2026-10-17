@@ -175,6 +175,113 @@ def test_baseline_retry_succeeds(tmp_path):
     assert info["state"] == "submitted" and info["status"] == "done" and len(api.bodies) == 2
 
 
+# -- best-of-k baseline ------------------------------------------------------------------------
+
+def text_of(m) -> str:
+    return m["content"] if isinstance(m["content"], str) else m["content"][0]["text"]
+
+
+class BestOfAPI(FakeAPI):
+    """Candidate calls replay `cands` in order; selector calls replay `picks`."""
+
+    def __init__(self, cands, picks=({"content": '{"choice": 1, "reason": "r"}'},)):
+        self.cands, self.picks = list(cands), list(picks)
+        super().__init__(self.route)
+
+    def route(self, body):
+        if text_of(body["messages"][0]).startswith("You are reviewing"):
+            return self.picks.pop(0) if len(self.picks) > 1 else self.picks[0]
+        return self.cands.pop(0)
+
+
+def variant(n: int) -> str:
+    """GOLDEN with a distinct trailing comment, so candidates differ beyond whitespace."""
+    return GOLDEN + f"// candidate {n}\n"
+
+
+def bestof(tmp_path, api, k=3, name="bestof-x-r1"):
+    llm = client(api)
+    llm.temperature = 0.7
+    return asyncio.run(baseline.run_bestof(load_bug(BUG), tmp_path / name, llm, llm.fork(0.0), k))
+
+
+def selector_bodies(api):
+    return [b for b in api.bodies if text_of(b["messages"][0]).startswith("You are reviewing")]
+
+
+def test_bestof_selects_and_sums_cost(tmp_path):
+    api = BestOfAPI([reply(line=10 + i, patched_file=variant(i)) for i in (1, 2, 3)],
+                    [{"content": '{"choice": 2, "reason": "fixes refill"}'}])
+    info = bestof(tmp_path, api)
+    d = tmp_path / "bestof-x-r1"
+    sel = selector_bodies(api)
+    assert len(api.bodies) == 4 and len(sel) == 1
+    assert info["cost_usd"] == pytest.approx(4 * 0.0021) and info["llm_calls"] == 4
+    assert info["distinct_candidates"] == 3 and info["status"] == "done" and info["state"] == "submitted"
+    # the selector's "2" is the second candidate in the shuffled order it was shown
+    chosen = info["selector"]["shown_order"][1]
+    assert info["selected"] == chosen
+    sub = json.loads((d / "submission" / "submission.json").read_text())
+    assert sub["selected_candidate"] == chosen and sub["line"] == 10 + chosen
+    assert (d / "submission" / "token_bucket.v").read_text() == variant(chosen)
+    assert json.loads((d / "run.json").read_text())["arm"] == "bestof"
+    for i in (1, 2, 3):
+        assert (d / "candidates" / f"c{i}" / "submission" / "submission.json").exists()
+    # candidates sample at the candidate temperature, the selector at 0; it sees diffs, no golden extras
+    assert {b["temperature"] for b in api.bodies if b not in sel} == {0.7} and sel[0]["temperature"] == 0.0
+    user = text_of(sel[0]["messages"][1])
+    assert user.count("```diff") == 3 and "+// candidate 2" in user and " 1| " in user
+    assert "golden" not in user.lower() and "ref_test" not in user
+    no_secret_in(d)
+
+
+def test_bestof_shuffle_is_seeded_by_run_name(tmp_path):
+    cands = lambda: [reply(patched_file=variant(i)) for i in (1, 2, 3)]
+    a = bestof(tmp_path / "a", BestOfAPI(cands()))["selector"]["shown_order"]
+    b = bestof(tmp_path / "b", BestOfAPI(cands()))["selector"]["shown_order"]
+    assert a == b and sorted(a) == [1, 2, 3]
+
+
+def test_bestof_identical_candidates_skip_selector(tmp_path):
+    same = [reply(patched_file=GOLDEN), reply(patched_file=GOLDEN.replace("\n", "\n  ")), reply(patched_file=GOLDEN)]
+    api = BestOfAPI(same)
+    info = bestof(tmp_path, api)
+    assert not selector_bodies(api) and info["llm_calls"] == 3
+    assert info["distinct_candidates"] == 1 and info["selected"] == 1 and not info["selector"]["called"]
+    assert [c["same_as"] for c in info["candidates"]] == [None, 1, 1]
+
+
+def test_bestof_selector_bad_reply_falls_back(tmp_path):
+    api = BestOfAPI([reply(patched_file=variant(i)) for i in (1, 2)], [{"content": "the second one"}])
+    info = bestof(tmp_path, api, k=2)
+    assert len(selector_bodies(api)) == 2   # retried once
+    assert info["selected"] == 1 and info["selector"]["fallback"] and info["status"] == "done"
+    assert "selector: attempt 1" in info["error"] and "attempt 2" in info["error"]
+
+
+def test_bestof_skips_failed_candidates(tmp_path):
+    bad = {"content": "no idea"}
+    api = BestOfAPI([bad, bad, reply(patched_file=variant(2)), reply(patched_file=variant(3))],
+                    [{"content": '{"choice": "1"}'}])
+    info = bestof(tmp_path, api)   # c1 fails both attempts, c2 and c3 are distinct
+    assert [c["state"] for c in info["candidates"]] == ["no_submission", "submitted", "submitted"]
+    assert info["distinct_candidates"] == 2 and info["selected"] in (2, 3) and info["error"].startswith("c1: attempt 1")
+
+
+def test_bestof_all_candidates_fail(tmp_path):
+    api = BestOfAPI([{"content": "?"}] * 4)
+    info = bestof(tmp_path, api, k=2)
+    assert info["status"] == "error" and info["state"] == "no_submission" and info["selected"] is None
+    assert not selector_bodies(api) and not (tmp_path / "bestof-x-r1" / "submission").exists()
+
+
+def test_parse_choice():
+    assert baseline.parse_choice('```json\n{"choice": 2, "reason": "x"}\n```', 3) == 2
+    for bad in ('{"choice": 4}', '{"choice": 0}', '{"choice": true}', "2", '{"pick": 1}'):
+        with pytest.raises(baseline.BadReply):
+            baseline.parse_choice(bad, 3)
+
+
 # -- agent loop (real tool server + sandbox) ---------------------------------------------------
 
 def last_tool_text(body) -> str:

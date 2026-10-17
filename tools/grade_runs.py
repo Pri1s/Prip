@@ -1,5 +1,9 @@
 """Grades finished tool-server runs: every <runs-dir>/<run>/ with a submission gets grade.json.
 
+Best-of-k runs also have candidates/c<i>/ (each a baseline run); those go to candidate_grades.json
+as "<run>/c<i>", a diagnostic only. A candidate identical to an already graded submission (same
+bug, file bytes and claimed line) reuses that grade instead of proving it again.
+
 Runs inside the container (the grader needs the answer key and the EDA tools; the tool server
 that produced the runs lives on the host). A run without a submission is a failure, not graded.
 
@@ -10,6 +14,7 @@ that produced the runs lives on the host). A run without a submission is a failu
 """
 
 import argparse
+import hashlib
 import json
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -34,10 +39,35 @@ def grade_one(run_dir: Path) -> dict:
             "block": r["localization"]["block"]}
 
 
+def submission_key(run_dir: Path):
+    sub = run_dir / "submission" / "submission.json"
+    if not sub.exists():
+        return None
+    s = json.loads(sub.read_text())
+    bug = json.loads((run_dir / "run.json").read_text())["bug"]
+    return bug, hashlib.sha256((run_dir / "submission" / s["file"]).read_bytes()).hexdigest(), s["line"]
+
+
 def grade(runs_dir: Path, check: bool) -> int:
     runs = sorted(d for d in runs_dir.iterdir() if (d / "run.json").exists())
+    cands = sorted(c for d in runs for c in (d / "candidates").glob("c*") if (c / "run.json").exists())
     with ProcessPoolExecutor() as pool:
         results = list(pool.map(grade_one, runs))
+        known = {k: r for d, r in zip(runs, results) if (k := submission_key(d))}
+        todo = {}
+        for c in cands:
+            k = submission_key(c)
+            if k is None or k not in known:
+                todo.setdefault(k or c, c)
+        fresh = dict(zip(todo, pool.map(grade_one, todo.values())))
+    if cands:
+        cand_results = []
+        for c in cands:
+            k = submission_key(c)
+            r = dict(known.get(k) or fresh[k or c])
+            r["run"] = f"{c.parent.parent.name}/{c.name}"
+            cand_results.append(r)
+        (runs_dir / "candidate_grades.json").write_text(json.dumps(cand_results, indent=2) + "\n")
     problems = 0
     for d, r in zip(runs, results):
         line = f"{r['run']:<40} {r['repair']:<14} exact={r['exact']!s:<5} block={r['block']!s:<5}"
@@ -49,7 +79,8 @@ def grade(runs_dir: Path, check: bool) -> int:
                 line += "  MISMATCH: " + "; ".join(bad) + f" ({r.get('reason', '')})"
         print(line)
     (runs_dir / "grades.json").write_text(json.dumps(results, indent=2) + "\n")
-    print(f"\n{len(runs)} runs graded" + (f", {problems} mismatches" if check else ""))
+    print(f"\n{len(runs)} runs graded" + (f", {len(cands)} candidates ({len(todo)} proved)" if cands else "")
+          + (f", {problems} mismatches" if check else ""))
     return 1 if problems else 0
 
 

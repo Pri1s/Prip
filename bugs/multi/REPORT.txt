@@ -1,0 +1,15 @@
+bcd_sum          accepted 2/2  tries 2  {'accepted': 2}
+clock_counter    accepted 2/2  tries 2  {'accepted': 2}
+mag_compare      accepted 2/2  tries 2  {'accepted': 2}
+op_unit          accepted 2/2  tries 2  {'accepted': 2}
+pack_8to16       accepted 2/2  tries 2  {'accepted': 2}
+pattern_watch    accepted 2/2  tries 2  {'accepted': 2}
+rotate_shift     accepted 2/2  tries 2  {'accepted': 2}
+rr_arbiter       accepted 2/2  tries 2  {'accepted': 2}
+sample_accum     accepted 2/2  tries 2  {'accepted': 2}
+secded_decode    accepted 2/2  tries 2  {'accepted': 2}
+seq_divider      accepted 2/2  tries 2  {'accepted': 2}
+signal_light     accepted 2/2  tries 2  {'accepted': 2}
+stack_buffer     accepted 2/2  tries 2  {'accepted': 2}
+token_bucket     accepted 2/2  tries 2  {'accepted': 2}
+updown_count     accepted 2/2  tries 2  {'accepted': 2}

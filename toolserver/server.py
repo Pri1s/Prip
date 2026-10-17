@@ -53,10 +53,14 @@ Finish with exactly one submit_patch(line, explanation): `line` is the buggy lin
 
 
 def load_bug(bug_id: str) -> dict:
-    for line in MANIFEST.read_text().splitlines():
-        if line.strip() and (bug := json.loads(line))["id"] == bug_id:
-            return bug
-    raise KeyError(f"no bug {bug_id!r} in {MANIFEST}")
+    """A bug from the single-bug pool or the Phase 6c multi-bug variants (bugs/multi*/)."""
+    for manifest in (MANIFEST, *sorted(MANIFEST.parent.glob("multi*/manifest.jsonl"))):
+        if not manifest.exists():
+            continue
+        for line in manifest.read_text().splitlines():
+            if line.strip() and (bug := json.loads(line))["id"] == bug_id:
+                return bug
+    raise KeyError(f"no bug {bug_id!r} in {MANIFEST} or bugs/multi*/")
 
 
 def _sha(text: str) -> str:
