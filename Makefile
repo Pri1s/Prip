@@ -4,7 +4,7 @@ RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
 HOST_PY ?= .venv/bin/python
 
 .PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check \
-        host-venv tools-test tools-check
+        host-venv tools-test tools-check agent-test agent-pilot
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -76,3 +76,13 @@ tools-test:
 # (golden fix and unchanged submissions), then the runs are graded in the container.
 tools-check:
 	$(HOST_PY) tools/tools_check.py
+
+# Phase 6a: agent loop, single-shot baseline and OpenRouter client, against a fake API (no cost;
+# agent tests use the real tool server and sandbox).
+agent-test:
+	$(HOST_PY) -m pytest -q -p no:cacheprovider agent/test_agent.py
+
+# Phase 6a pilot: agent + baseline on the 30 dev bugs, one run each, graded, with cost projected
+# for the full eval. Spends money: needs OPENROUTER_API_KEY.
+agent-pilot:
+	$(HOST_PY) -m agent.eval --set dev --repeats 1 --out runs/pilot
