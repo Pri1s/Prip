@@ -75,7 +75,8 @@ def run_state(run_dir: Path) -> str:
 
 
 async def run_agent(bug: dict, run_dir: Path, llm: OpenRouter, cfg: dict, server_args: list[str] = (),
-                    max_seconds: float = MAX_SECONDS) -> dict:
+                    max_seconds: float = MAX_SECONDS, sim: bool = True) -> dict:
+    """sim=False is the Phase 6d ablation: no run_cocotb tool, AGENT_GUIDE_NOSIM, arm "nosim"."""
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True)
     log = Log(run_dir / "messages.jsonl")
@@ -83,13 +84,13 @@ async def run_agent(bug: dict, run_dir: Path, llm: OpenRouter, cfg: dict, server
     stop, error, turn = None, None, 0
     params = StdioServerParameters(command=sys.executable, cwd=str(ROOT), env=server_env(), args=[
         "-m", "toolserver.server", "--bug", bug["id"], "--runs-dir", str(run_dir.parent),
-        "--run-id", run_dir.name, *server_args])
+        "--run-id", run_dir.name, *server_args, *([] if sim else ["--no-sim"])])
     try:
         async with Client(params) as client:
             tools = (await client.list_tools()).tools
             names = {t.name for t in tools}
             fn_tools = to_function_tools(tools)
-            messages = agent_messages(client.instructions or "", bug)
+            messages = agent_messages(client.instructions or "", bug, sim)
             for m in messages:
                 log.write(0, m)
             nudges = 0
@@ -137,7 +138,7 @@ async def run_agent(bug: dict, run_dir: Path, llm: OpenRouter, cfg: dict, server
     except Exception as e:  # the tool server died or MCP broke: record it, don't lose the run
         stop, error = "tool_server_error", f"{type(e).__name__}: {e}"
 
-    info = {"arm": "agent", "bug": bug["id"], "model": llm.model, "temperature": llm.temperature,
+    info = {"arm": "agent" if sim else "nosim", "bug": bug["id"], "model": llm.model, "temperature": llm.temperature,
             "prompt_cache": llm.cache, "stop_reason": stop, "error": error, "state": run_state(run_dir),
             "turns": turn, **llm.usage.as_dict(), "elapsed_s": round(time.time() - t0, 1),
             "status": "error" if stop in ("api_error", "tool_server_error") else "done"}

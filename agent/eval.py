@@ -3,9 +3,10 @@
   .venv/bin/python -m agent.eval --set dev --repeats 1 --out runs/pilot     (`make agent-pilot`)
   .venv/bin/python -m agent.eval --set eval --repeats 3 --out runs/eval
 
-Arms: agent, baseline, and bestof (k baseline candidates + a selector on the baseline model, with
-k and temperature from config.json's bestof section, which must be tuned on dev first unless
---bestof-k / --bestof-temp override it).
+Arms: agent, nosim (the agent without run_cocotb: the Phase 6d ablation), baseline, and bestof
+(k baseline candidates + a selector on the baseline model, with k and temperature from
+config.json's bestof section, which must be tuned on dev first unless --bestof-k / --bestof-temp
+override it).
 
 Each run is <out>/<arm>-<bug>-r<k>/. Resumable: a run with an llm.json is kept (rerun errored
 runs with --retry-errors), and a half-finished run directory is deleted and redone. After the runs,
@@ -57,8 +58,11 @@ async def one(arm: str, bug: dict, run_dir: Path, cfg: dict, sem) -> dict:
             selector = llm.fork(b["selector_temperature"], b.get("selector_model") or cfg["baseline_model"])
             info = await run_bestof(bug, run_dir, llm, selector, b["k"])
         else:
-            llm = OpenRouter(cfg[f"{arm}_model"], cfg["temperature"], cfg["max_output_tokens"], cfg["prompt_cache"])
-            info = await (run_agent(bug, run_dir, llm, cfg) if arm == "agent" else run_baseline(bug, run_dir, llm))
+            model = cfg["agent_model" if arm in ("agent", "nosim") else "baseline_model"]
+            llm = OpenRouter(model, cfg["temperature"], cfg["max_output_tokens"], cfg["prompt_cache"])
+            info = await (run_agent(bug, run_dir, llm, cfg) if arm == "agent" else
+                          run_agent(bug, run_dir, llm, cfg, sim=False) if arm == "nosim" else
+                          run_baseline(bug, run_dir, llm))
         print(f"{run_dir.name:<44} {info['stop_reason'] or '-':<18} ${info['cost_usd']:.4f}", flush=True)
         return info
 
@@ -119,7 +123,7 @@ def main():
     ap.add_argument("--agent-model", help="override agent_model from agent/config.json")
     ap.add_argument("--baseline-model", help="override baseline_model from agent/config.json")
     ap.add_argument("--repeats", type=int, default=1)
-    ap.add_argument("--arms", default="agent,baseline", help="comma list of agent, baseline, bestof")
+    ap.add_argument("--arms", default="agent,baseline", help="comma list of agent, nosim, baseline, bestof")
     ap.add_argument("--bestof-k", type=int, help="override bestof.k (dev tuning only)")
     ap.add_argument("--bestof-temp", type=float, help="override bestof.temperature (dev tuning only)")
     ap.add_argument("--workers", type=int, default=4)
@@ -137,8 +141,8 @@ def main():
     if not out.is_relative_to(ROOT):
         sys.exit("--out must be inside the repository (grading mounts it into the container)")
     arms = [x for x in a.arms.split(",") if x]
-    if set(arms) - {"agent", "baseline", "bestof"}:
-        sys.exit("--arms takes agent, baseline and/or bestof")
+    if set(arms) - {"agent", "nosim", "baseline", "bestof"}:
+        sys.exit("--arms takes agent, nosim, baseline and/or bestof")
     if a.bestof_k is not None:
         cfg["bestof"]["k"] = a.bestof_k
     if a.bestof_temp is not None:
@@ -157,13 +161,14 @@ def main():
           flush=True)
     if todo:
         try:
-            info = OpenRouter(cfg["agent_model" if arms[0] == "agent" else "baseline_model"], cfg["temperature"], 1).check_key()
+            info = OpenRouter(cfg["agent_model" if arms[0] in ("agent", "nosim") else "baseline_model"],
+                              cfg["temperature"], 1).check_key()
         except LLMError as e:
             sys.exit(f"OpenRouter check failed, nothing was run: {e}")
         left = info.get("limit_remaining")
         print("OpenRouter key OK; " + (f"${left:.2f} left under the key's credit limit" if left is not None
                                        else "no credit limit set on this key"), flush=True)
-        if "agent" in arms:
+        if {"agent", "nosim"} & set(arms):
             remove_leftovers()
         asyncio.run(drive(todo, cfg, a.workers))
 

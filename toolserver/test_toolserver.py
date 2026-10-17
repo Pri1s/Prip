@@ -274,3 +274,28 @@ def test_over_mcp_stdio(tmp_path):
 
     asyncio.run(session())
     assert json.loads((tmp_path / "r1/run.json").read_text())["state"] == "submitted"
+
+
+def test_no_sim_run(tmp_path):
+    r = Run(load_bug(BUG), tmp_path / "run", tool_timeout=20, seed=1, sim=False)
+    try:
+        assert "only lint can be run" in r.instructions() and "cocotb" not in r.instructions()
+        r.call("write_file", path="tests/t.py", content="import cocotb\n")   # still writable
+        assert "not available" in refused(r, "run_cocotb", test_file="tests/t.py")
+        assert r.calls == 1 and json.loads((r.dir / "run.json").read_text())["sim"] is False
+    finally:
+        r.finish()
+
+
+def test_no_sim_over_mcp(tmp_path):
+    from mcp import Client, StdioServerParameters
+
+    async def session():
+        params = StdioServerParameters(command=sys.executable, cwd=str(ROOT), args=[
+            "-m", "toolserver.server", "--bug", BUG, "--runs-dir", str(tmp_path), "--run-id", "r1", "--no-sim"])
+        async with Client(params) as c:
+            assert sorted(t.name for t in (await c.list_tools()).tools) == ["lint", "read_file", "submit_patch", "write_file"]
+            assert "only lint can be run" in c.instructions
+            assert (await c.call_tool("run_cocotb", {"test_file": "tests/t.py"})).is_error
+
+    asyncio.run(session())

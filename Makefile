@@ -7,7 +7,7 @@ HOST_PY ?= .venv/bin/python
 
 .PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check \
         host-venv tools-test tools-check agent-test agent-pilot bugs-multi probe bugs-multi-eval eval-haiku \
-        bestof-tune bestof-tune-k2 eval-bestof
+        bestof-tune bestof-tune-k2 eval-bestof exposure eval-nosim
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -137,3 +137,17 @@ eval-bestof:
 	$(HOST_PY) -m agent.eval --bugs bugs/multi_eval/eval_set.json --arms bestof --repeats $(BESTOF_REPEATS) \
 		--workers 6 --baseline-model $(HAIKU) --out runs/eval-haiku-bestof
 	$(HOST_PY) tools/compare_arms.py runs/eval-haiku runs/eval-haiku-bestof
+
+# Phase 6b exposure: replay every run's own tests on buggy and golden RTL in fresh sandboxes
+# (host; no API cost), then the comparison with the exposure funnel.
+exposure:
+	$(HOST_PY) tools/replay_exposure.py runs/eval-haiku runs/eval-haiku-bestof
+	$(HOST_PY) tools/compare_arms.py runs/eval-haiku runs/eval-haiku-bestof
+
+# Phase 6d ablation: the agent without run_cocotb (same model, budgets, eval set; prompt changed
+# only where it needs simulation), repeats paired with runs/eval-haiku's agent runs.
+NOSIM_REPEATS ?= 2
+eval-nosim:
+	$(HOST_PY) -m agent.eval --bugs bugs/multi_eval/eval_set.json --arms nosim --repeats $(NOSIM_REPEATS) \
+		--workers 6 --agent-model $(HAIKU) --out runs/eval-haiku-nosim
+	$(HOST_PY) tools/compare_arms.py runs/eval-haiku runs/eval-haiku-bestof runs/eval-haiku-nosim
