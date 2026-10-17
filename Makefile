@@ -6,7 +6,8 @@ RUN   := docker run --rm $(MOUNT) $(IMAGE)
 HOST_PY ?= .venv/bin/python
 
 .PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check \
-        host-venv tools-test tools-check agent-test agent-pilot bugs-multi probe bugs-multi-eval eval-haiku
+        host-venv tools-test tools-check agent-test agent-pilot bugs-multi probe bugs-multi-eval eval-haiku \
+        bestof-tune bestof-tune-k2 eval-bestof
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -112,3 +113,27 @@ REPEATS ?= 3
 eval-haiku:
 	$(HOST_PY) -m agent.eval --bugs bugs/multi_eval/eval_set.json --repeats $(REPEATS) --workers 6 \
 		--agent-model $(HAIKU) --baseline-model $(HAIKU) --out runs/eval-haiku
+
+# Phase 6d: cost-matched best-of-k baseline. Tune temperature (k=3) on the dev three-bug set, then
+# tools/bestof_tune.py applies the pre-set rule and freezes k / temperature in agent/config.json.
+# Spends money (about $0.7): needs OPENROUTER_API_KEY.
+bestof-tune:
+	for t in 0.2 0.7 1.0; do \
+		$(HOST_PY) -m agent.eval --bugs bugs/multi/probe_set.json --arms bestof --baseline-model $(HAIKU) \
+			--bestof-k 3 --bestof-temp $$t --workers 6 --out runs/bestof-tune/k3-t$$t || exit 1; \
+	done
+	$(HOST_PY) tools/bestof_tune.py
+
+# Only if bestof-tune says k=3 is over the cost cap: k=2 at the chosen temperature.
+bestof-tune-k2:
+	$(HOST_PY) -m agent.eval --bugs bugs/multi/probe_set.json --arms bestof --baseline-model $(HAIKU) \
+		--bestof-k 2 --bestof-temp $(T) --workers 6 --out runs/bestof-tune/k2-t$(T)
+	$(HOST_PY) tools/bestof_tune.py
+
+# Phase 6d eval: the frozen best-of-k baseline on the three-bug eval set, repeats paired with
+# runs/eval-haiku's agent runs, then the three-arm comparison.
+BESTOF_REPEATS ?= 2
+eval-bestof:
+	$(HOST_PY) -m agent.eval --bugs bugs/multi_eval/eval_set.json --arms bestof --repeats $(BESTOF_REPEATS) \
+		--workers 6 --baseline-model $(HAIKU) --out runs/eval-haiku-bestof
+	$(HOST_PY) tools/compare_arms.py runs/eval-haiku runs/eval-haiku-bestof

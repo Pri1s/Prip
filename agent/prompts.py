@@ -62,3 +62,21 @@ functions taking `dut`; start a clock with `Clock(dut.clk, 10, unit="ns").start(
 def baseline_messages(bug: dict) -> list[dict]:
     return [{"role": "system", "content": BASELINE_SYSTEM},
             {"role": "user", "content": task_context(bug)}]
+
+
+SELECTOR_SYSTEM = """\
+You are reviewing candidate fixes for one Verilog design that has a bug. You get the spec, the buggy
+RTL and several candidate patches (unified diffs against the buggy file), each with the line its
+author blames and their explanation. You can't run anything: answer in one reply.
+Pick the candidate most likely to make the design meet its spec without changing anything else.
+Reply with one JSON object and nothing else:
+{"choice": <candidate number>, "reason": "<one or two sentences>"}"""
+
+
+def selector_messages(bug: dict, candidates: list[dict]) -> list[dict]:
+    """candidates: [{"line", "explanation", "diff"}], shown as candidates 1..n in the given order."""
+    parts = [task_context(bug)]
+    for i, c in enumerate(candidates, 1):
+        parts.append(f"Candidate {i} (blames line {c['line']}):\n{c['explanation']}\n\n```diff\n{c['diff']}```")
+    return [{"role": "system", "content": SELECTOR_SYSTEM},
+            {"role": "user", "content": "\n\n".join(parts)}]
