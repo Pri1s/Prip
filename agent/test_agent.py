@@ -284,6 +284,14 @@ def test_parse_choice():
 
 # -- agent loop (real tool server + sandbox) ---------------------------------------------------
 
+def load_replay():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("replay_exposure", ROOT / "tools" / "replay_exposure.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def last_tool_text(body) -> str:
     m = body["messages"][-1]
     assert m["role"] == "tool"
@@ -414,3 +422,67 @@ def test_tls_uses_certifi_bundle():
     import certifi
     assert llm_mod.SSL_CONTEXT.verify_mode.name == "CERT_REQUIRED"
     assert llm_mod.SSL_CONTEXT.cert_store_stats()["x509_ca"] > 50, certifi.where()
+
+
+# -- Phase 6d ablation and Phase 6b exposure replay (real tool server + sandbox) ---------------
+
+def test_nosim_agent_has_no_simulator(tmp_path, _clean_sandboxes):
+    bug = load_bug(BUG)
+    api = FakeAPI(
+        tool("run_cocotb", "Try to run a test anyway.", test_file="tests/t.py", target="original"),
+        tool("write_file", "Fix it.", path="token_bucket.v", content=GOLDEN),
+        tool("lint", "Lint it."),
+        tool("submit_patch", "Submitting.", line=bug["localization"]["buggy_lines"][0], explanation="fixed"),
+    )
+    info = asyncio.run(ra.run_agent(bug, tmp_path / "nosim-x-r1", client(api), CFG, sim=False))
+    d = tmp_path / "nosim-x-r1"
+    assert info["arm"] == "nosim" and info["state"] == "submitted"
+    assert {t["function"]["name"] for t in api.bodies[0]["tools"]} == {"read_file", "write_file", "lint", "submit_patch"}
+    system = text_of(api.bodies[0]["messages"][0])
+    assert "only lint can be run" in system and "review it before you submit" in system
+    assert "cocotb" not in system and "run_cocotb" not in system
+    assert "Change only what the bug needs" in system   # shared guide lines stay verbatim
+    assert "run_cocotb" in last_tool_text(api.bodies[1])  # the call was refused, nothing ran
+    assert not (d / "history").exists() and json.loads((d / "run.json").read_text())["sim"] is False
+
+
+def test_exposure_replay_agent(tmp_path, _clean_sandboxes):
+    replay = load_replay()
+    bug = load_bug(BUG)
+    ref = (ROOT / "designs" / "token_bucket" / "ref_test.py").read_text()
+    always_fails = "import cocotb\n@cocotb.test()\nasync def wrong_expectation(dut):\n    assert False\n"
+    line = bug["localization"]["buggy_lines"][0]
+
+    def run(name, test):
+        api = FakeAPI(tool("write_file", "Test.", path="tests/test_spec.py", content=test),
+                      tool("run_cocotb", "Run on original.", test_file="tests/test_spec.py", target="original"),
+                      tool("run_cocotb", "Again, same test.", test_file="test_spec.py", target="original"),
+                      tool("submit_patch", "Submit.", line=line, explanation="x"))
+        asyncio.run(ra.run_agent(bug, tmp_path / name, client(api), CFG))
+        return replay.replay_run(tmp_path / name, force=False)
+
+    good = run("agent-good-r1", ref)
+    assert good["has_test"] and good["confirmed_on_buggy"] and good["exposed"]
+    assert len(good["replays"]) == 1   # the identical second run on original is replayed once
+    r = good["replays"][0]
+    assert r["golden"]["status"] == "finished" and r["exposing"] == ["token_bucket_matches_model"]
+    assert json.loads((tmp_path / "agent-good-r1" / "exposure.json").read_text())["exposed"]
+    assert not (tmp_path / "agent-good-r1" / "_replay").exists()
+    final = replay.replay_run(tmp_path / "agent-good-r1", force=False, final=True)   # Metric A: submitted tests
+    assert final["final_tests"] and final["exposed"] and final["replays"][0]["source"] == "submission"
+    assert (tmp_path / "agent-good-r1" / "exposure_final.json").exists()
+
+    bad = run("agent-bad-r1", always_fails)
+    assert bad["confirmed_on_buggy"] and not bad["exposed"]   # fails on golden too: a false alarm
+
+
+def test_exposure_replay_baseline(tmp_path, _clean_sandboxes):
+    replay = load_replay()
+    ref = (ROOT / "designs" / "token_bucket" / "ref_test.py").read_text()
+    vacuous = "import cocotb\n@cocotb.test()\nasync def nothing(dut):\n    pass\n"
+    out = {}
+    for name, test in (("baseline-ref-r1", ref), ("baseline-vac-r1", vacuous)):
+        asyncio.run(baseline.run_baseline(load_bug(BUG), tmp_path / name, client(FakeAPI(reply(test=test)))))
+        out[name] = replay.replay_run(tmp_path / name, force=False)
+    assert out["baseline-ref-r1"]["exposed"] and out["baseline-ref-r1"]["seed"] == replay.BASELINE_SEED
+    assert out["baseline-vac-r1"]["has_test"] and not out["baseline-vac-r1"]["confirmed_on_buggy"]

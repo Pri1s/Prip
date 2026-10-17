@@ -51,6 +51,14 @@ No testbench is provided. Tests run with cocotb 2.0 and Icarus Verilog (timescal
 Finish with exactly one submit_patch(line, explanation): `line` is the buggy line's number in
 {original}. Budget: {calls} tool calls and {minutes} minutes."""
 
+# Phase 6d ablation (--no-sim): no run_cocotb, and only the lines about running tests change.
+_TESTS_LINE = "\n  tests/           write your own cocotb tests here as tests/<name>.py"
+_SIM_LINES = """No testbench is provided. Tests run with cocotb 2.0 and Icarus Verilog (timescale 1ns/1ps) on
+{rtl} (target "working") or {original} (target "original"); there is no network."""
+assert _TESTS_LINE in INSTRUCTIONS and _SIM_LINES in INSTRUCTIONS
+INSTRUCTIONS_NOSIM = INSTRUCTIONS.replace(_TESTS_LINE, "").replace(
+    _SIM_LINES, "No testbench or simulator is available; only lint can be run. There is no network.")
+
 
 def load_bug(bug_id: str) -> dict:
     """A bug from the single-bug pool or the Phase 6c multi-bug variants (bugs/multi*/)."""
@@ -88,8 +96,9 @@ class Run:
     """All tool behavior for one run, independent of the MCP transport (tests call it directly)."""
 
     def __init__(self, bug: dict, run_dir: Path, sandbox=None, max_calls=MAX_CALLS,
-                 max_seconds=MAX_SECONDS, tool_timeout=TOOL_TIMEOUT, seed=None, image=IMAGE):
+                 max_seconds=MAX_SECONDS, tool_timeout=TOOL_TIMEOUT, seed=None, image=IMAGE, sim=True):
         self.bug = bug
+        self.sim = sim
         self.dir = Path(run_dir)
         self.ws = ws_mod.create(bug, self.dir / "workspace")
         self.sandbox = sandbox or Sandbox(self.ws.root, image=image)
@@ -107,7 +116,7 @@ class Run:
     def _write_run_json(self):
         info = {"bug": self.bug["id"], "top": self.ws.top, "seed": self.seed, "state": self.state,
                 "started": self.started, "calls": self.calls, "max_calls": self.max_calls,
-                "max_seconds": self.max_seconds, "elapsed_s": round(time.time() - self.started, 1)}
+                "max_seconds": self.max_seconds, "sim": self.sim, "elapsed_s": round(time.time() - self.started, 1)}
         (self.dir / "run.json").write_text(json.dumps(info, indent=2) + "\n")
 
     def _trace(self, entry: dict):
@@ -115,8 +124,8 @@ class Run:
             f.write(json.dumps(entry) + "\n")
 
     def instructions(self) -> str:
-        return INSTRUCTIONS.format(rtl=self.ws.rtl, original=self.ws.original, calls=self.max_calls,
-                                   minutes=self.max_seconds // 60)
+        return (INSTRUCTIONS if self.sim else INSTRUCTIONS_NOSIM).format(
+            rtl=self.ws.rtl, original=self.ws.original, calls=self.max_calls, minutes=self.max_seconds // 60)
 
     def _budget_note(self) -> str:
         left = max(0, int(self.max_seconds - (time.time() - self.started)))
@@ -131,6 +140,8 @@ class Run:
         try:
             if self.state != "running":
                 raise ToolFailure(f"the run is over ({self.state}); no more tool calls are accepted")
+            if tool == "run_cocotb" and not self.sim:
+                raise ToolFailure("run_cocotb is not available in this run")
             self.calls += 1
             if self.calls > self.max_calls or t0 - self.started > self.max_seconds:
                 self.state = "budget_exhausted"
@@ -280,12 +291,14 @@ def build_server(run: Run):
         constructs)."""
         return call("lint")
 
-    @server.tool()
     def run_cocotb(test_file: str, target: str = "working", testcase: str | None = None) -> str:
         """Run one of your cocotb test files (tests/<name>.py) against the working RTL file
         (target "working") or the original buggy file (target "original"). Optionally run only
         one test function. Each run is limited to 60 seconds."""
         return call("run_cocotb", test_file=test_file, target=target, testcase=testcase)
+
+    if run.sim:
+        server.tool()(run_cocotb)
 
     @server.tool()
     def submit_patch(line: int, explanation: str = "") -> str:
@@ -306,11 +319,12 @@ def main():
     ap.add_argument("--tool-timeout", type=int, default=TOOL_TIMEOUT)
     ap.add_argument("--seed", type=int)
     ap.add_argument("--image", default=IMAGE)
+    ap.add_argument("--no-sim", action="store_true", help="Phase 6d ablation: no run_cocotb tool")
     a = ap.parse_args()
     bug = load_bug(a.bug)
     run_id = a.run_id or f"{bug['id']}-{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}"
     run = Run(bug, Path(a.runs_dir) / run_id, max_calls=a.max_calls, max_seconds=a.max_seconds,
-              tool_timeout=a.tool_timeout, seed=a.seed, image=a.image)
+              tool_timeout=a.tool_timeout, seed=a.seed, image=a.image, sim=not a.no_sim)
     print(f"run {run_id}: {run.dir}", file=sys.stderr)
     try:
         run.sandbox.start()

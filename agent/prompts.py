@@ -38,8 +38,26 @@ How to work:
 - Your budget is small: don't spend calls rereading files you have already seen."""
 
 
-def agent_messages(instructions: str, bug: dict) -> list[dict]:
-    return [{"role": "system", "content": f"{instructions}\n\n{AGENT_GUIDE}"},
+# Phase 6d ablation: the same guide without simulation. Only the parts that need run_cocotb change:
+# the first bullet (same structure, "review" for "rerun your tests"), and the failing-test sentence
+# and the cocotb basics are dropped. Everything else is AGENT_GUIDE verbatim; no new strategy.
+_SIM_FIRST = """\
+- Read the spec, write cocotb tests that check what it requires, and run them on the original
+  file to find behavior that breaks the spec. Then find the line responsible, fix the working
+  file, lint it, and rerun your tests on it before you submit."""
+_NOSIM_FIRST = """\
+- Read the spec and the original file to find behavior that breaks the spec. Then find the line
+  responsible, fix the working file, lint it, and review it before you submit."""
+_SIM_FAILING = "\n  When a test fails, say whether you think the design or your test is wrong, and why."
+_SIM_BASICS = AGENT_GUIDE[AGENT_GUIDE.index("- cocotb 2.0 basics:"):AGENT_GUIDE.index("- Your budget is small")]
+assert _SIM_FIRST in AGENT_GUIDE and _SIM_FAILING in AGENT_GUIDE and _SIM_BASICS
+AGENT_GUIDE_NOSIM = (AGENT_GUIDE.replace(_SIM_FIRST, _NOSIM_FIRST).replace(_SIM_FAILING, "")
+                     .replace(_SIM_BASICS, ""))
+
+
+def agent_messages(instructions: str, bug: dict, sim: bool = True) -> list[dict]:
+    guide = AGENT_GUIDE if sim else AGENT_GUIDE_NOSIM
+    return [{"role": "system", "content": f"{instructions}\n\n{guide}"},
             {"role": "user", "content": task_context(bug) + "\n\nFind and fix the bug, then call submit_patch."}]
 
 

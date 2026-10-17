@@ -3,13 +3,15 @@
   .venv/bin/python tools/compare_arms.py runs/eval-haiku [runs/eval-haiku-bestof] [--md bugs/multi_eval/RESULTS.md]
 
 Runs from all given directories are pooled. Pairs are (bug, repeat k): agent-<bug>-r<k> vs
-baseline-<bug>-r<k> (and vs bestof-<bug>-r<k>). McNemar's exact test uses only
+baseline-<bug>-r<k> (and vs nosim-<bug>-r<k>, the agent without run_cocotb, and bestof-<bug>-r<k>). McNemar's exact test uses only
 the discordant pairs (one arm repaired, the other didn't): under "no difference" each is equally
 likely to go either way, so the p-value is a two-sided binomial test at 1/2. A per-bug view (the
 majority over repeats) is reported too, since repeats of one bug are not independent.
 Also reports how the agent used its tools: did it run a test at all, and did any test fail on the
 original buggy file (the raw ingredient of Phase 6b's exposure metric; not yet replayed on golden).
-For best-of-k: its k and temperature, distinct candidates, selector use, and how often any
+Exposure (Phase 6b, tools/replay_exposure.py): Metric A scores every arm's final tests by one rule
+(fails on buggy, passes on golden in a sandboxed replay); Metric B is the agent's executed tests
+that failed during the run, validated the same way (not applicable to arms that never run tests). For best-of-k: its k and temperature, distinct candidates, selector use, and how often any
 candidate passed (what a perfect selector would get; a diagnostic, not the arm's score).
 """
 
@@ -38,8 +40,8 @@ def agent_tool_use(run_dir: Path) -> dict:
     return {"calls": len(entries), "cocotb_runs": len(runs), "ran_test": bool(runs), "failing_on_original": fail_orig}
 
 
-ARMS = ("agent", "baseline", "bestof")
-LABEL = {"agent": "Agent", "baseline": "Baseline", "bestof": "Best-of-k"}
+ARMS = ("agent", "nosim", "baseline", "bestof")
+LABEL = {"agent": "Agent", "nosim": "No-sim agent", "baseline": "Baseline", "bestof": "Best-of-k"}
 
 
 def load_runs(dirs: list[Path]):
@@ -107,7 +109,7 @@ def main():
         lines.append(row("Cost per run vs agent", lambda x: f"{per_run[x] / per_run['agent']:.2f}x"))
     lines.append("")
 
-    for other in ("baseline", "bestof"):
+    for other in ("nosim", "baseline", "bestof"):
         if "agent" not in arms or other not in arms:
             continue
         p = paired(grades, info, "agent", other)
@@ -139,6 +141,33 @@ def main():
                   f"selector cost ${sel_cost:.4f} of ${cost['bestof']:.4f}",
                   f"- any candidate passed (perfect-selector diagnostic, not a score): "
                   + (pct(any_pass, len(runs)) if cand else "not graded"), ""]
+
+    def exposure(arm: str, name: str) -> list[dict]:
+        return [json.loads((d / name).read_text()) for _, d in of[arm].values() if (d / name).exists()]
+
+    # Metric A, test exposure capability: every arm's final tests, same rule (agent: --final replay).
+    test_exp = {x: exposure(x, "exposure_final.json" if x in ("agent", "nosim") else "exposure.json") for x in arms}
+    have = [x for x in arms if test_exp[x]]
+    if have:
+        rate = lambda key, x: pct(sum(e[key] for e in test_exp[x]), len(test_exp[x]))
+        lines += ["**Metric A: test exposure capability** (each run's final tests, executed or not, replayed in "
+                  "the sandbox; a test function must fail on buggy and pass on golden):", "",
+                  "| | " + " | ".join(LABEL[x] for x in have) + " |", "|---" * (len(have) + 1) + "|",
+                  "| Runs replayed | " + " | ".join(f"{len(test_exp[x])}/{len(of[x])}" for x in have) + " |",
+                  "| Left a test | " + " | ".join(rate("has_test", x) for x in have) + " |",
+                  "| A test fails on buggy | " + " | ".join(rate("confirmed_on_buggy", x) for x in have) + " |",
+                  "| **Exposes the bug** | " + " | ".join(rate("exposed", x) for x in have) + " |", ""]
+    # Metric B, executed exposure: only an arm that runs tests can observe a failure (agent).
+    ran = [x for x in ("agent",) if x in arms and exposure(x, "exposure.json")]
+    for x in ran:
+        e = exposure(x, "exposure.json")
+        lines += [f"**Metric B: executed exposure ({LABEL[x].lower()} only; not applicable to arms that never run "
+                  "a test):**", "",
+                  f"- a test failed on the buggy RTL during the run: {pct(sum(r['has_test'] for r in e), len(e))}",
+                  f"- ... and failed again in the replay: {pct(sum(r['confirmed_on_buggy'] for r in e), len(e))}",
+                  f"- ... and that test passes on golden (validated): {pct(sum(r['exposed'] for r in e), len(e))}",
+                  f"- failing tests that also fail on golden only (false alarm): "
+                  f"{pct(sum(r['confirmed_on_buggy'] and not r['exposed'] for r in e), len(e))}", ""]
 
     if "agent" in arms:
         agents = graded["agent"]
