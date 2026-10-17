@@ -23,6 +23,7 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 4b | Grading flow: hidden reference testbench + bug-line localization check | Done |
 | 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch`, sandboxed | Done |
 | 6a | Agent loop (OpenRouter), single-shot baseline, parallel eval runner with cost tracking | Done (live pilot not yet run) |
+| 6c | Difficulty probe: the dev pilot saturated (both arms 30/30), so model × single/three-bug cells were measured for the baseline only | Done: Haiku 5.5 + three bugs = 60% |
 | 6b | Detection scoring (exposure replay, recognition judge), McNemar report | Planned |
 | 7 | Waveform summarizer (Python prototype, then C++) | Planned |
 
@@ -47,6 +48,8 @@ make host-venv        # host Python env for the tool server (mcp 2.3.0, pytest)
 make tools-test       # Phase 5: tool-server tests against a real sandbox (escape attempts, timeouts, budget)
 make tools-check      # Phase 5: scripted client over MCP on the 30 dev bugs, then graded (about 4 min)
 make agent-test       # Phase 6a: agent loop, baseline, OpenRouter client against a fake API (no cost)
+make bugs-multi       # Phase 6c: three-bug variants of the pool -> bugs/multi/ (container)
+make probe            # Phase 6c: baseline on the probe cells, table in bugs/multi/PROBE.md (paid, about $0.60)
 make agent-pilot      # Phase 6a: both arms on the 30 dev bugs, graded, cost projected (needs OPENROUTER_API_KEY; spends money)
 make shell            # interactive shell in the container, repo mounted at /work
 ```
@@ -203,7 +206,8 @@ tools/         corpus_check.py, validate_grader.py, bugs_check.py, subset_check.
 smoke/         FIFO, two hand-edited bad FIFOs, cocotb test, run.sh
 docs/research/ notes on RTL bug taxonomies, bug depth vs difficulty, and contamination
 mutator/       mutation operators (pyslang), simulation checks, bug-pool generator
-bugs/          generated bug pool: <design>/<id>.v, manifest.jsonl (answer key), candidates.jsonl, REPORT.md
+bugs/          generated bug pool: <design>/<id>.v, manifest.jsonl (answer key), candidates.jsonl, REPORT.md;
+               multi/ = Phase 6c three-bug variants (manifest.jsonl, probe_set.json, PROBE.md)
 agent/         run_agent.py (agent loop), baseline.py, eval.py (parallel runner), llm.py (OpenRouter), prompts.py, config.json
 ```
 

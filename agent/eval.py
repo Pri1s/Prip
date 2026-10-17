@@ -31,8 +31,8 @@ FULL_EVAL_RUNS = 180 * 3
 DOCKER = ["docker", "run", "--rm", "--network", "none", *repo_mount(ROOT), IMAGE]
 
 
-def load_set(name: str) -> list[dict]:
-    return [load_bug(b["id"]) for b in json.loads((ROOT / "bugs" / f"{name}_set.json").read_text())["bugs"]]
+def load_set(path: Path) -> list[dict]:
+    return [load_bug(b["id"]) for b in json.loads(Path(path).read_text())["bugs"]]
 
 
 def finished(run_dir: Path, retry_errors: bool) -> bool:
@@ -89,6 +89,9 @@ def summarize(out: Path) -> dict:
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--set", choices=["dev", "eval"], default="dev")
+    ap.add_argument("--bugs", type=Path, help="a bug set file ({\"bugs\": [{\"id\": ...}]}) instead of --set")
+    ap.add_argument("--agent-model", help="override agent_model from agent/config.json")
+    ap.add_argument("--baseline-model", help="override baseline_model from agent/config.json")
     ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--arms", default="agent,baseline")
     ap.add_argument("--workers", type=int, default=4)
@@ -99,13 +102,16 @@ def main():
     a = ap.parse_args()
     load_env_file()
     cfg = load_config()
-    out = (a.out or Path("runs") / a.set).resolve()
+    cfg["agent_model"] = a.agent_model or cfg["agent_model"]
+    cfg["baseline_model"] = a.baseline_model or cfg["baseline_model"]
+    set_file = a.bugs.resolve() if a.bugs else ROOT / "bugs" / f"{a.set}_set.json"
+    out = (a.out or Path("runs") / (set_file.stem if a.bugs else a.set)).resolve()
     if not out.is_relative_to(ROOT):
         sys.exit("--out must be inside the repository (grading mounts it into the container)")
     arms = [x for x in a.arms.split(",") if x]
     if set(arms) - {"agent", "baseline"}:
         sys.exit("--arms takes agent and/or baseline")
-    bugs = load_set(a.set)[:a.limit]
+    bugs = load_set(set_file)[:a.limit]
     out.mkdir(parents=True, exist_ok=True)
 
     jobs = [(arm, bug, out / f"{arm}-{bug['id']}-r{k}") for bug in bugs for k in range(1, a.repeats + 1)
@@ -115,7 +121,7 @@ def main():
           f"({a.workers} at a time; agent {cfg['agent_model']}, baseline {cfg['baseline_model']})", flush=True)
     if todo:
         try:
-            info = OpenRouter(cfg["agent_model"], cfg["temperature"], 1).check_key()
+            info = OpenRouter(cfg[f"{arms[0]}_model"], cfg["temperature"], 1).check_key()
         except LLMError as e:
             sys.exit(f"OpenRouter check failed, nothing was run: {e}")
         left = info.get("limit_remaining")
@@ -130,7 +136,8 @@ def main():
         g = subprocess.run(DOCKER + ["python", "tools/grade_runs.py", "grade", str(out.relative_to(ROOT))])
         if g.returncode:
             print("grading failed; summary has no grades", file=sys.stderr)
-    summary = {"set": a.set, "repeats": a.repeats, "config": cfg, "arms": summarize(out)}
+    summary = {"set": str(set_file.relative_to(ROOT)) if set_file.is_relative_to(ROOT) else str(set_file),
+               "repeats": a.repeats, "config": cfg, "arms": summarize(out)}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary["arms"], indent=2))
 
