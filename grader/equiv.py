@@ -134,8 +134,12 @@ def clocking(netlist: dict) -> set[tuple[str, int]]:
 
 def check_patch_source(rtl: Path):
     """Returns a reason string if the patch uses forbidden directives or system tasks, else None."""
-    text = STRINGS_COMMENTS.sub(lambda m: '""' if m.group(0)[0] == '"' else " ",
-                                Path(rtl).read_text(errors="replace"))
+    return check_patch_text(Path(rtl).read_text(errors="replace"))
+
+
+def check_patch_text(source: str):
+    """check_patch_source on the source text itself."""
+    text = STRINGS_COMMENTS.sub(lambda m: '""' if m.group(0)[0] == '"' else " ", source)
     if m := FORBIDDEN_DIRECTIVE.search(text):
         return f"forbidden construct: `{m.group(1)}"
     if m := FORBIDDEN_TASK.search(text):

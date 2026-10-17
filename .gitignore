@@ -1,7 +1,11 @@
 __pycache__/
 build/
+runs/
+.venv/
 .pytest_cache/
 sim_build/
+runs/
+.venv/
 eqy_out*/
 *.log
 results.xml

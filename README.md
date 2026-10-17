@@ -21,13 +21,14 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 3a | Bug pool: source mutator, filtered by the grader and checked in simulation | Done |
 | 3b | Frozen 180-bug eval set + 30-bug dev set, stratified by kind and depth | Done |
 | 4b | Grading flow: hidden reference testbench + bug-line localization check | Done |
-| 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch` | Planned |
+| 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch`, sandboxed | Done |
 | 6 | Agent, single-shot baseline, parallel eval runner | Planned |
 | 7 | Waveform summarizer (Python prototype, then C++) | Planned |
 
 ## Quick start
 
-Requires Docker. The image builds for amd64 and arm64 (tested on Apple Silicon).
+Requires Docker. The image builds for amd64 and arm64 (tested on Apple Silicon). The tool server
+also needs Python 3.11+ on the host (`make host-venv`).
 
 ```bash
 make image            # build the toolchain image (OSS CAD Suite 2026-10-01, Python 3.11, cocotb 2.0.1)
@@ -41,6 +42,9 @@ make subset-check     # re-verify the eval/dev sets: quotas, caps, disjoint, rep
 make mutator-test     # unit tests for the mutation operators
 make grader-test      # unit tests: SBY log reading, verdict combination, localization scoring, patch rules
 make grade-check      # Phase 4b: full grading flow on every eval/dev bug, correct rewrites, sim-broken patches
+make host-venv        # host Python env for the tool server (mcp 2.3.0, pytest)
+make tools-test       # Phase 5: tool-server tests against a real sandbox (escape attempts, timeouts, budget)
+make tools-check      # Phase 5: scripted client over MCP on the 30 dev bugs, then graded (about 4 min)
 make shell            # interactive shell in the container, repo mounted at /work
 ```
 
@@ -190,7 +194,9 @@ McNemar's test for agent vs baseline).
 docker/        Dockerfile and vvp wrapper (keeps pinned cocotb ahead of the suite's bundled copy)
 designs/       benchmark corpus (see above); THIRD_PARTY.md has the RTLLM license
 grader/        grade.py (scores a submission), equiv.py (formal grader), ref_runner.py (reference test runner), validation/ suites
-tools/         corpus_check.py, validate_grader.py, bugs_check.py, subset_check.py, grade_check.py
+toolserver/    MCP tool server (server.py), workspace.py, sandbox.py, box_runner.py (runs inside the sandbox)
+tools/         corpus_check.py, validate_grader.py, bugs_check.py, subset_check.py, grade_check.py,
+               grade_runs.py (grades tool-server runs), tools_check.py
 smoke/         FIFO, two hand-edited bad FIFOs, cocotb test, run.sh
 docs/research/ notes on RTL bug taxonomies, bug depth vs difficulty, and contamination
 mutator/       mutation operators (pyslang), simulation checks, bug-pool generator
@@ -198,14 +204,48 @@ bugs/          generated bug pool: <design>/<id>.v, manifest.jsonl (answer key),
 agent/         placeholder for Phase 6
 ```
 
-## Isolation (planned for Phases 5–6)
+## Tool server and isolation (Phase 5)
 
-The answer key (golden RTL, reference tests, bug manifest) exists only in the grader
-environment. The agent works on a fresh copy of the buggy RTL and spec, and any tool that
-runs agent-written code does so in a no-network container. Each run ends with one
-`submit_patch`; grading happens afterwards. The claimed buggy line refers to the original buggy file, so the
-workspace will also keep a read-only copy of it: an agent that has edited its working copy can
-still look up the original line numbers.
+The agent only ever acts through five MCP tools, served by `toolserver/server.py` (one process
+per run, MCP over stdio). The server runs **on the host, outside the sandbox**: it holds the state
+the agent must not be able to change (the one submission, the budget, the trace). Agent-controlled
+code (its RTL and its Python tests) runs in a per-run **sandbox container**.
+
+```
+host:      agent loop (Phase 6) ⇄ MCP stdio ⇄ tool server ── runs/<run>/{run.json, trace.jsonl, history/, submission/}
+                                                    │ docker exec (lint, run_cocotb)
+sandbox:   --network none, read-only root fs, workspace mounted read-only at /ws, /tmp scratch (512 MB),
+           no capabilities, user nobody, 2 GB / 256 processes, 60 s per call, all processes killed after each call
+grader:    container with the repo (answer key), run after the agent is done: tools/grade_runs.py
+```
+
+| Tool | Does |
+|------|------|
+| `read_file(path, start_line?, end_line?)` | Numbered lines of `<top>.v`, `spec.md`, `original/<top>.v` or `tests/<name>.py` |
+| `write_file(path, content)` | Replaces `<top>.v` or `tests/<name>.py`; nothing else is writable |
+| `lint()` | `iverilog -g2005 -Wall`, Yosys elaboration, and the grader's patch rules (`` `include ``/`` `ifdef ``, file I/O tasks, formal-only constructs) |
+| `run_cocotb(test_file, target?, testcase?)` | One of the agent's tests on the working copy (`working`) or the buggy file as given (`original`): per-test PASS/FAIL with the assertion message, end of the log (8,000 characters), or TIMEOUT |
+| `submit_patch(line, explanation)` | Submits `<top>.v` and the claimed line (numbered as in `original/<top>.v`); once; the run ends and every tool refuses afterwards |
+
+- **Workspace**: `<top>.v` (editable), `spec.md`, `original/<top>.v` (read-only), `tests/`. No golden
+  RTL, reference test, manifest, `meta.json` or bug ID.
+- **Only the server writes the workspace.** The sandbox mounts it read-only, so agent code can't
+  plant files, symlinks or fill the host disk. The server still refuses symlinks, FIFOs and any path
+  outside the fixed layout.
+- **Budget**: 40 tool calls and 15 minutes per run (`--max-calls`, `--max-seconds`); running out
+  ends the run without a submission, which counts as a failure.
+- **Trace**: every call goes to `trace.jsonl` (file contents as hashes). Every `run_cocotb` saves
+  the test files it ran, the RTL it ran on, and the per-test results in `history/<n>/`, with one
+  recorded `RANDOM_SEED` per run, so Phase 6 can replay the agent's tests offline.
+- **`run_cocotb` results are feedback, not evidence.** The agent's test can print anything, so its
+  result is never scored. Phase 6 measures **detection** by replaying the agent's tests offline: a
+  test counts only if it fails on the buggy RTL and passes on golden. That replay runs agent Python
+  next to the answer key, so it must run in the same kind of sandbox with only a copy of `golden.v`.
+
+```bash
+.venv/bin/python -m toolserver.server --bug token_bucket_07 --runs-dir runs   # one run, MCP on stdio
+docker run --rm -v "$PWD":/work -w /work rtl-debug-agent:dev python tools/grade_runs.py grade runs
+```
 
 ## License
 
