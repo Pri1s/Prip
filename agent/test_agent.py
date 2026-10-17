@@ -286,3 +286,24 @@ def test_env_file(tmp_path, monkeypatch):
     assert "PRIP_TEST_EMPTY" not in os.environ and os.environ["PRIP_TEST_KEEP"] == "env"
     monkeypatch.delenv("PRIP_TEST_A")
     llm_mod.load_env_file(tmp_path / "missing")   # no file: nothing happens
+
+
+def test_check_key():
+    def ok(url, body, headers, timeout):
+        assert url == llm_mod.KEY_URL and body is None and headers["Authorization"] == f"Bearer {SECRET}"
+        return 200, json.dumps({"data": {"label": "x", "limit_remaining": 12.5}}).encode()
+    assert client(ok).check_key()["limit_remaining"] == 12.5
+
+    with pytest.raises(LLMError, match="key rejected: No auth"):
+        client(lambda *a: (401, b'{"error": {"message": "No auth credentials found"}}')).check_key()
+
+    def down(*a):
+        raise OSError("certificate verify failed")
+    with pytest.raises(LLMError, match="can't reach OpenRouter"):
+        client(down).check_key()
+
+
+def test_tls_uses_certifi_bundle():
+    import certifi
+    assert llm_mod.SSL_CONTEXT.verify_mode.name == "CERT_REQUIRED"
+    assert llm_mod.SSL_CONTEXT.cert_store_stats()["x509_ca"] > 50, certifi.where()

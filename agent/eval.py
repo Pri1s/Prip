@@ -20,7 +20,7 @@ from collections import Counter
 from pathlib import Path
 
 from agent.baseline import run_baseline
-from agent.llm import OpenRouter, load_config, load_env_file
+from agent.llm import LLMError, OpenRouter, load_config, load_env_file
 from agent.run_agent import run_agent
 from toolserver.sandbox import IMAGE, remove_leftovers, repo_mount
 from toolserver.server import load_bug
@@ -114,6 +114,13 @@ def main():
     print(f"{len(jobs)} runs, {len(jobs) - len(todo)} already done, {len(todo)} to run "
           f"({a.workers} at a time; agent {cfg['agent_model']}, baseline {cfg['baseline_model']})", flush=True)
     if todo:
+        try:
+            info = OpenRouter(cfg["agent_model"], cfg["temperature"], 1).check_key()
+        except LLMError as e:
+            sys.exit(f"OpenRouter check failed, nothing was run: {e}")
+        left = info.get("limit_remaining")
+        print("OpenRouter key OK; " + (f"${left:.2f} left under the key's credit limit" if left is not None
+                                       else "no credit limit set on this key"), flush=True)
         if "agent" in arms:
             remove_leftovers()
         asyncio.run(drive(todo, cfg, a.workers))

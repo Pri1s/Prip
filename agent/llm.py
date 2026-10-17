@@ -1,7 +1,9 @@
 """OpenRouter chat-completions client: the one place that holds the API key, retries and records cost.
 
 Host only. The key comes from OPENROUTER_API_KEY (the environment, or the repo's gitignored .env)
-and is sent in the Authorization header and nowhere else: it is never written to a run directory or passed to the tool server or sandbox.
+and is sent in the Authorization header and nowhere else: it is never written to a run directory or
+passed to the tool server or sandbox. TLS uses certifi's CA bundle, so it works on Pythons that ship
+without system certificates (python.org / some Homebrew builds on macOS).
 
 Uses the OpenAI-compatible endpoint, so tool calls are OpenAI-style function calls. For Anthropic
 models the system prompt and the newest message get a cache breakpoint, so each turn re-reads the
@@ -12,16 +14,21 @@ import asyncio
 import copy
 import json
 import os
+import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
 
+import certifi
+
 URL = "https://openrouter.ai/api/v1/chat/completions"
+KEY_URL = "https://openrouter.ai/api/v1/key"   # key info: free, no tokens
 KEY_VAR = "OPENROUTER_API_KEY"
 CONFIG = Path(__file__).resolve().parent / "config.json"
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"   # gitignored; see .env.example
 RETRY_STATUS = {408, 429, 500, 502, 503, 504}
 RETRY_WAIT_S = 10
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 class LLMError(Exception):
@@ -50,10 +57,11 @@ def load_env_file(path: Path = ENV_FILE):
             os.environ[key] = value
 
 
-def http_post(url: str, body: bytes, headers: dict, timeout: float) -> tuple[int, bytes]:
-    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+def http_post(url: str, body: bytes | None, headers: dict, timeout: float) -> tuple[int, bytes]:
+    """POST `body`, or GET when it is None. Returns (status, response bytes)."""
+    req = urllib.request.Request(url, data=body, headers=headers, method="GET" if body is None else "POST")
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -129,6 +137,20 @@ class OpenRouter:
             err = (data.get("error") or {}) if isinstance(data, dict) else {}
             return None, f"HTTP {status}: {err.get('message') or str(data)[:300]}", status in RETRY_STATUS or status == 200
         return data, "", False
+
+    def check_key(self) -> dict:
+        """Before a batch: one free request that proves TLS and the key work. Returns OpenRouter's key
+        info (credit limit, usage; never the key itself). Raises LLMError."""
+        try:
+            status, raw = self.post(KEY_URL, None, {"Authorization": f"Bearer {self.key}"}, 30)
+            data = json.loads(raw)
+        except (OSError, TimeoutError) as e:
+            raise LLMError(f"can't reach OpenRouter: {type(e).__name__}: {e}")
+        except json.JSONDecodeError:
+            raise LLMError(f"HTTP {status}: key check response is not JSON")
+        if status != 200 or not isinstance(data.get("data"), dict):
+            raise LLMError(f"HTTP {status}: key rejected: {(data.get('error') or {}).get('message') or data}")
+        return data["data"]
 
     async def complete(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
         """One completion: {"message", "finish_reason", "usage"}. Retries once on a transient failure."""
