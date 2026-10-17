@@ -22,7 +22,7 @@ from pathlib import Path
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import get_default_environment
 
-from agent.llm import KEY_VAR, LLMError, OpenRouter, load_config
+from agent.llm import KEY_VAR, LLMError, OpenRouter, load_config, load_env_file
 from agent.prompts import agent_messages
 from toolserver.server import MAX_CALLS, MAX_SECONDS, load_bug
 
@@ -152,6 +152,7 @@ def main():
     ap.add_argument("--run-id")
     ap.add_argument("--model", help="override agent_model from agent/config.json")
     a = ap.parse_args()
+    load_env_file()
     cfg = load_config()
     bug = load_bug(a.bug)
     run_id = a.run_id or f"agent-{bug['id']}-{time.strftime('%Y%m%d-%H%M%S')}"

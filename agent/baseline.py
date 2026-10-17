@@ -19,7 +19,7 @@ import re
 import time
 from pathlib import Path
 
-from agent.llm import LLMError, OpenRouter, load_config
+from agent.llm import LLMError, OpenRouter, load_config, load_env_file
 from agent.prompts import baseline_messages
 from toolserver.server import load_bug
 from toolserver.workspace import MAX_FILE_BYTES
@@ -111,6 +111,7 @@ def main():
     ap.add_argument("--run-id")
     ap.add_argument("--model", help="override baseline_model from agent/config.json")
     a = ap.parse_args()
+    load_env_file()
     cfg = load_config()
     bug = load_bug(a.bug)
     run_id = a.run_id or f"baseline-{bug['id']}-{time.strftime('%Y%m%d-%H%M%S')}"

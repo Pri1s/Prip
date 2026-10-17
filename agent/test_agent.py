@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent import baseline, run_agent as ra
+from agent import baseline, llm as llm_mod, run_agent as ra
 from agent.llm import KEY_VAR, LLMError, OpenRouter
 from toolserver.sandbox import remove_leftovers
 from toolserver.server import load_bug
@@ -271,3 +271,18 @@ def test_agent_turn_cap(tmp_path, _clean_sandboxes):
     api = FakeAPI(tool("read_file", "look", path="spec.md"))
     info = agent(tmp_path, api, cfg={**CFG, "max_turns": 3})
     assert info["stop_reason"] == "turn_cap" and info["turns"] == 3 and info["state"] == "no_submission"
+
+
+def test_env_file(tmp_path, monkeypatch):
+    f = tmp_path / ".env"
+    f.write_text("# comment\nOPENROUTER_API_KEY='sk-from-file'\nexport PRIP_TEST_A=\"x y\"\nPRIP_TEST_EMPTY=\nnot a line\n")
+    monkeypatch.delenv(KEY_VAR)
+    monkeypatch.delenv("PRIP_TEST_A", raising=False)
+    monkeypatch.setenv("PRIP_TEST_KEEP", "env")
+    f.write_text(f.read_text() + "PRIP_TEST_KEEP=file\n")
+    llm_mod.load_env_file(f)
+    import os
+    assert os.environ[KEY_VAR] == "sk-from-file" and os.environ["PRIP_TEST_A"] == "x y"
+    assert "PRIP_TEST_EMPTY" not in os.environ and os.environ["PRIP_TEST_KEEP"] == "env"
+    monkeypatch.delenv("PRIP_TEST_A")
+    llm_mod.load_env_file(tmp_path / "missing")   # no file: nothing happens

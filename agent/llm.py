@@ -1,7 +1,7 @@
 """OpenRouter chat-completions client: the one place that holds the API key, retries and records cost.
 
-Host only. The key comes from OPENROUTER_API_KEY and is sent in the Authorization header and
-nowhere else: it is never written to a run directory or passed to the tool server or sandbox.
+Host only. The key comes from OPENROUTER_API_KEY (the environment, or the repo's gitignored .env)
+and is sent in the Authorization header and nowhere else: it is never written to a run directory or passed to the tool server or sandbox.
 
 Uses the OpenAI-compatible endpoint, so tool calls are OpenAI-style function calls. For Anthropic
 models the system prompt and the newest message get a cache breakpoint, so each turn re-reads the
@@ -19,6 +19,7 @@ from pathlib import Path
 URL = "https://openrouter.ai/api/v1/chat/completions"
 KEY_VAR = "OPENROUTER_API_KEY"
 CONFIG = Path(__file__).resolve().parent / "config.json"
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"   # gitignored; see .env.example
 RETRY_STATUS = {408, 429, 500, 502, 503, 504}
 RETRY_WAIT_S = 10
 
@@ -29,6 +30,24 @@ class LLMError(Exception):
 
 def load_config(path: Path = CONFIG) -> dict:
     return json.loads(Path(path).read_text())
+
+
+def load_env_file(path: Path = ENV_FILE):
+    """Sets KEY=VALUE lines from the repo's .env into the environment (variables already set win).
+    Called by the command-line entry points only."""
+    path = Path(path)
+    if not path.is_file():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        key, value = key.strip(), value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        if key and value and key not in os.environ:
+            os.environ[key] = value
 
 
 def http_post(url: str, body: bytes, headers: dict, timeout: float) -> tuple[int, bytes]:

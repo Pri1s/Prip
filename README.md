@@ -266,7 +266,7 @@ as `read_file` numbers it (`agent/prompts.py`). The only difference is the tool 
 - **Runner** (`agent/eval.py`): `<out>/<arm>-<bug>-r<k>/` per run, N in parallel, resumable;
   grades in the container, then writes `summary.json` with outcomes, tokens, cost and the cost
   projected for the full eval (180 bugs × 3 runs per arm).
-- **API key**: `OPENROUTER_API_KEY` stays on the host in the request header. It never reaches the
+- **API key**: `OPENROUTER_API_KEY` (from `.env` or the environment) stays on the host in the request header. It never reaches the
   tool server, the sandbox or any run file (`make agent-test` checks this).
 - **Cost**: Anthropic models get prompt-cache breakpoints (system prompt + newest message), so
   each turn rereads the conversation at the cached price. Models live in `agent/config.json`.
@@ -278,8 +278,9 @@ judge from a different model family, blind to the repair verdict, checked agains
 A run that ends without a submission fails repair and localization but can still earn exposure and
 recognition.
 
+Put the key in `.env` at the repo root (gitignored; template in `.env.example`) or export it.
+
 ```bash
-export OPENROUTER_API_KEY=...
 .venv/bin/python -m agent.run_agent --bug token_bucket_07 --runs-dir runs   # one agent run
 .venv/bin/python -m agent.eval --set dev --limit 5 --out runs/try          # small paid trial
 ```

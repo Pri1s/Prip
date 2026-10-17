@@ -7,7 +7,7 @@ Each run is <out>/<arm>-<bug>-r<k>/. Resumable: a run with an llm.json is kept (
 runs with --retry-errors), and a half-finished run directory is deleted and redone. After the runs,
 every run is graded in the container (tools/grade_runs.py) and <out>/summary.json gets per-arm
 outcomes, tokens and cost, plus the cost projected for the full eval (180 bugs x 3 runs per arm).
-Spends money: needs OPENROUTER_API_KEY.
+Spends money: needs OPENROUTER_API_KEY (environment or .env).
 """
 
 import argparse
@@ -20,14 +20,15 @@ from collections import Counter
 from pathlib import Path
 
 from agent.baseline import run_baseline
-from agent.llm import OpenRouter, load_config
+from agent.llm import OpenRouter, load_config, load_env_file
 from agent.run_agent import run_agent
 from toolserver.sandbox import IMAGE, remove_leftovers
 from toolserver.server import load_bug
 
 ROOT = Path(__file__).resolve().parent.parent
 FULL_EVAL_RUNS = 180 * 3
-DOCKER = ["docker", "run", "--rm", "-v", f"{ROOT}:/work", "-w", "/work", IMAGE]
+# Grading needs no network; the repo mount includes .env, so the container gets none.
+DOCKER = ["docker", "run", "--rm", "--network", "none", "-v", f"{ROOT}:/work", "-w", "/work", IMAGE]
 
 
 def load_set(name: str) -> list[dict]:
@@ -96,6 +97,7 @@ def main():
     ap.add_argument("--retry-errors", action="store_true")
     ap.add_argument("--no-grade", action="store_true")
     a = ap.parse_args()
+    load_env_file()
     cfg = load_config()
     out = (a.out or Path("runs") / a.set).resolve()
     if not out.is_relative_to(ROOT):
