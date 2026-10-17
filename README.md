@@ -24,6 +24,7 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch`, sandboxed | Done |
 | 6a | Agent loop (OpenRouter), single-shot baseline, parallel eval runner with cost tracking | Done (live pilot not yet run) |
 | 6c | Difficulty probe: the dev pilot saturated (both arms 30/30), so model × single/three-bug cells were measured for the baseline only | Done: Haiku 5.5 + three bugs = 60% |
+| 6c eval | Fresh 180 three-bug variants, agent vs baseline on Haiku 5.5, 2 repeats | Done: repair 96% vs 65%, McNemar p ≈ 3e-28 ([results](bugs/multi_eval/RESULTS.md)) |
 | 6b | Detection scoring (exposure replay, recognition judge), McNemar report | Planned |
 | 7 | Waveform summarizer (Python prototype, then C++) | Planned |
 
@@ -49,6 +50,8 @@ make tools-test       # Phase 5: tool-server tests against a real sandbox (escap
 make tools-check      # Phase 5: scripted client over MCP on the 30 dev bugs, then graded (about 4 min)
 make agent-test       # Phase 6a: agent loop, baseline, OpenRouter client against a fake API (no cost)
 make bugs-multi       # Phase 6c: three-bug variants of the pool -> bugs/multi/ (container)
+make bugs-multi-eval  # Phase 6c: the fresh 180-variant three-bug eval set -> bugs/multi_eval/ (container)
+make eval-haiku       # Phase 6c: agent vs baseline on Haiku 5.5 over that set (paid, about $1.25 per repeat)
 make probe            # Phase 6c: baseline on the probe cells, table in bugs/multi/PROBE.md (paid, about $0.60)
 make agent-pilot      # Phase 6a: both arms on the 30 dev bugs, graded, cost projected (needs OPENROUTER_API_KEY; spends money)
 make shell            # interactive shell in the container, repo mounted at /work
