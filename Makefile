@@ -6,7 +6,7 @@ RUN   := docker run --rm $(MOUNT) $(IMAGE)
 HOST_PY ?= .venv/bin/python
 
 .PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check \
-        host-venv tools-test tools-check agent-test agent-pilot
+        host-venv tools-test tools-check agent-test agent-pilot bugs-multi probe bugs-multi-eval eval-haiku
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
@@ -52,7 +52,7 @@ subset-check:
 
 # Unit tests for the mutation operators.
 mutator-test:
-	$(RUN) python -m pytest -q -p no:cacheprovider mutator/test_operators.py
+	$(RUN) python -m pytest -q -p no:cacheprovider mutator/test_operators.py mutator/test_combine.py
 
 # Unit tests for the grader: reading SBY proof logs, combining the formal verdict with the
 # reference test, scoring localization, and the patch source rules.
@@ -88,3 +88,27 @@ agent-test:
 # for the full eval. Spends money: needs OPENROUTER_API_KEY.
 agent-pilot:
 	$(HOST_PY) -m agent.eval --set dev --repeats 1 --out runs/pilot
+
+# Phase 6c difficulty probe: three-bug variants of the pool (2 per design, seeded) -> bugs/multi/.
+bugs-multi:
+	$(RUN) python mutator/combine.py $(DESIGNS)
+
+# Phase 6c: the fresh three-bug eval set (12 per design, new seed, no probe or dev components).
+bugs-multi-eval:
+	$(RUN) python mutator/combine.py --set eval $(DESIGNS)
+
+# Phase 6c: single-shot baseline only, on the cells of the 2x2 (model x single/three bugs), then a
+# table in bugs/multi/PROBE.md. Spends money (about $1.50): needs OPENROUTER_API_KEY.
+HAIKU ?= anthropic/claude-haiku-5.5
+probe:
+	$(HOST_PY) -m agent.eval --bugs bugs/multi/probe_set.json --arms baseline --out runs/probe/sonnet-multi
+	$(HOST_PY) -m agent.eval --set dev --arms baseline --baseline-model $(HAIKU) --out runs/probe/haiku-single
+	$(HOST_PY) -m agent.eval --bugs bugs/multi/probe_set.json --arms baseline --baseline-model $(HAIKU) --out runs/probe/haiku-multi
+	$(HOST_PY) tools/probe_report.py
+
+# Phase 6c eval: agent vs single-shot baseline on the three-bug eval set, both on Haiku 5.5.
+# REPEATS=1 first to measure cost; rerun with REPEATS=3 to add runs 2 and 3 (finished runs are kept).
+REPEATS ?= 3
+eval-haiku:
+	$(HOST_PY) -m agent.eval --bugs bugs/multi_eval/eval_set.json --repeats $(REPEATS) --workers 6 \
+		--agent-model $(HAIKU) --baseline-model $(HAIKU) --out runs/eval-haiku

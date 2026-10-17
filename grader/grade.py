@@ -41,10 +41,14 @@ COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
 
 
 def load_bug(bug_id: str) -> dict:
-    for line in MANIFEST.read_text().splitlines():
-        if line.strip() and (bug := json.loads(line))["id"] == bug_id:
-            return bug
-    raise KeyError(f"no bug {bug_id!r} in {MANIFEST}")
+    """A bug from the single-bug pool or the Phase 6c multi-bug variants (bugs/multi*/)."""
+    for manifest in (MANIFEST, *sorted((ROOT / "bugs").glob("multi*/manifest.jsonl"))):
+        if not manifest.exists():
+            continue
+        for line in manifest.read_text().splitlines():
+            if line.strip() and (bug := json.loads(line))["id"] == bug_id:
+                return bug
+    raise KeyError(f"no bug {bug_id!r} in {MANIFEST} or bugs/multi*/")
 
 
 def _line_of(text: str, offset: int) -> int:
@@ -65,7 +69,11 @@ def deletion_lines(buggy: str, offset: int) -> set[int]:
 
 
 def expected_lines(bug: dict, buggy: str) -> tuple[set[int], set[int]]:
-    """(lines that count as exact, lines that count as block) in the buggy file."""
+    """(lines that count as exact, lines that count as block) in the buggy file. A multi-bug
+    variant counts any component's lines."""
+    if "components" in bug:
+        return ({l for c in bug["components"] for l in c["exact_lines"]},
+                {l for c in bug["components"] for l in c["block_lines"]})
     loc = bug["localization"]
     if loc["buggy_lines"]:
         lo, hi = loc["buggy_lines"]

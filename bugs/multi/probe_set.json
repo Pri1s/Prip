@@ -1,0 +1,98 @@
+{
+ "seed": 20261017,
+ "k": 3,
+ "set": "probe-multi",
+ "size": 30,
+ "bugs": [
+  {
+   "id": "bcd_sum_m01"
+  },
+  {
+   "id": "bcd_sum_m02"
+  },
+  {
+   "id": "clock_counter_m01"
+  },
+  {
+   "id": "clock_counter_m02"
+  },
+  {
+   "id": "mag_compare_m01"
+  },
+  {
+   "id": "mag_compare_m02"
+  },
+  {
+   "id": "op_unit_m01"
+  },
+  {
+   "id": "op_unit_m02"
+  },
+  {
+   "id": "pack_8to16_m01"
+  },
+  {
+   "id": "pack_8to16_m02"
+  },
+  {
+   "id": "pattern_watch_m01"
+  },
+  {
+   "id": "pattern_watch_m02"
+  },
+  {
+   "id": "rotate_shift_m01"
+  },
+  {
+   "id": "rotate_shift_m02"
+  },
+  {
+   "id": "rr_arbiter_m01"
+  },
+  {
+   "id": "rr_arbiter_m02"
+  },
+  {
+   "id": "sample_accum_m01"
+  },
+  {
+   "id": "sample_accum_m02"
+  },
+  {
+   "id": "secded_decode_m01"
+  },
+  {
+   "id": "secded_decode_m02"
+  },
+  {
+   "id": "seq_divider_m01"
+  },
+  {
+   "id": "seq_divider_m02"
+  },
+  {
+   "id": "signal_light_m01"
+  },
+  {
+   "id": "signal_light_m02"
+  },
+  {
+   "id": "stack_buffer_m01"
+  },
+  {
+   "id": "stack_buffer_m02"
+  },
+  {
+   "id": "token_bucket_m01"
+  },
+  {
+   "id": "token_bucket_m02"
+  },
+  {
+   "id": "updown_count_m01"
+  },
+  {
+   "id": "updown_count_m02"
+  }
+ ]
+}

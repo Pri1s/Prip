@@ -1,0 +1,550 @@
+{
+ "seed": 20261018,
+ "k": 3,
+ "set": "eval-multi",
+ "size": 180,
+ "manifest_sha256": "9aae736d236aa70a0b87cd62cd0d673e4a52de4deb9f7d3d11912fa71da2b40f",
+ "excluded_single_bugs": 111,
+ "bugs": [
+  {
+   "id": "bcd_sum_e01"
+  },
+  {
+   "id": "bcd_sum_e02"
+  },
+  {
+   "id": "bcd_sum_e03"
+  },
+  {
+   "id": "bcd_sum_e04"
+  },
+  {
+   "id": "bcd_sum_e05"
+  },
+  {
+   "id": "bcd_sum_e06"
+  },
+  {
+   "id": "bcd_sum_e07"
+  },
+  {
+   "id": "bcd_sum_e08"
+  },
+  {
+   "id": "bcd_sum_e09"
+  },
+  {
+   "id": "bcd_sum_e10"
+  },
+  {
+   "id": "bcd_sum_e11"
+  },
+  {
+   "id": "bcd_sum_e12"
+  },
+  {
+   "id": "clock_counter_e01"
+  },
+  {
+   "id": "clock_counter_e02"
+  },
+  {
+   "id": "clock_counter_e03"
+  },
+  {
+   "id": "clock_counter_e04"
+  },
+  {
+   "id": "clock_counter_e05"
+  },
+  {
+   "id": "clock_counter_e06"
+  },
+  {
+   "id": "clock_counter_e07"
+  },
+  {
+   "id": "clock_counter_e08"
+  },
+  {
+   "id": "clock_counter_e09"
+  },
+  {
+   "id": "clock_counter_e10"
+  },
+  {
+   "id": "clock_counter_e11"
+  },
+  {
+   "id": "clock_counter_e12"
+  },
+  {
+   "id": "mag_compare_e01"
+  },
+  {
+   "id": "mag_compare_e02"
+  },
+  {
+   "id": "mag_compare_e03"
+  },
+  {
+   "id": "mag_compare_e04"
+  },
+  {
+   "id": "mag_compare_e05"
+  },
+  {
+   "id": "mag_compare_e06"
+  },
+  {
+   "id": "mag_compare_e07"
+  },
+  {
+   "id": "mag_compare_e08"
+  },
+  {
+   "id": "mag_compare_e09"
+  },
+  {
+   "id": "mag_compare_e10"
+  },
+  {
+   "id": "mag_compare_e11"
+  },
+  {
+   "id": "mag_compare_e12"
+  },
+  {
+   "id": "op_unit_e01"
+  },
+  {
+   "id": "op_unit_e02"
+  },
+  {
+   "id": "op_unit_e03"
+  },
+  {
+   "id": "op_unit_e04"
+  },
+  {
+   "id": "op_unit_e05"
+  },
+  {
+   "id": "op_unit_e06"
+  },
+  {
+   "id": "op_unit_e07"
+  },
+  {
+   "id": "op_unit_e08"
+  },
+  {
+   "id": "op_unit_e09"
+  },
+  {
+   "id": "op_unit_e10"
+  },
+  {
+   "id": "op_unit_e11"
+  },
+  {
+   "id": "op_unit_e12"
+  },
+  {
+   "id": "pack_8to16_e01"
+  },
+  {
+   "id": "pack_8to16_e02"
+  },
+  {
+   "id": "pack_8to16_e03"
+  },
+  {
+   "id": "pack_8to16_e04"
+  },
+  {
+   "id": "pack_8to16_e05"
+  },
+  {
+   "id": "pack_8to16_e06"
+  },
+  {
+   "id": "pack_8to16_e07"
+  },
+  {
+   "id": "pack_8to16_e08"
+  },
+  {
+   "id": "pack_8to16_e09"
+  },
+  {
+   "id": "pack_8to16_e10"
+  },
+  {
+   "id": "pack_8to16_e11"
+  },
+  {
+   "id": "pack_8to16_e12"
+  },
+  {
+   "id": "pattern_watch_e01"
+  },
+  {
+   "id": "pattern_watch_e02"
+  },
+  {
+   "id": "pattern_watch_e03"
+  },
+  {
+   "id": "pattern_watch_e04"
+  },
+  {
+   "id": "pattern_watch_e05"
+  },
+  {
+   "id": "pattern_watch_e06"
+  },
+  {
+   "id": "pattern_watch_e07"
+  },
+  {
+   "id": "pattern_watch_e08"
+  },
+  {
+   "id": "pattern_watch_e09"
+  },
+  {
+   "id": "pattern_watch_e10"
+  },
+  {
+   "id": "pattern_watch_e11"
+  },
+  {
+   "id": "pattern_watch_e12"
+  },
+  {
+   "id": "rotate_shift_e01"
+  },
+  {
+   "id": "rotate_shift_e02"
+  },
+  {
+   "id": "rotate_shift_e03"
+  },
+  {
+   "id": "rotate_shift_e04"
+  },
+  {
+   "id": "rotate_shift_e05"
+  },
+  {
+   "id": "rotate_shift_e06"
+  },
+  {
+   "id": "rotate_shift_e07"
+  },
+  {
+   "id": "rotate_shift_e08"
+  },
+  {
+   "id": "rotate_shift_e09"
+  },
+  {
+   "id": "rotate_shift_e10"
+  },
+  {
+   "id": "rotate_shift_e11"
+  },
+  {
+   "id": "rotate_shift_e12"
+  },
+  {
+   "id": "rr_arbiter_e01"
+  },
+  {
+   "id": "rr_arbiter_e02"
+  },
+  {
+   "id": "rr_arbiter_e03"
+  },
+  {
+   "id": "rr_arbiter_e04"
+  },
+  {
+   "id": "rr_arbiter_e05"
+  },
+  {
+   "id": "rr_arbiter_e06"
+  },
+  {
+   "id": "rr_arbiter_e07"
+  },
+  {
+   "id": "rr_arbiter_e08"
+  },
+  {
+   "id": "rr_arbiter_e09"
+  },
+  {
+   "id": "rr_arbiter_e10"
+  },
+  {
+   "id": "rr_arbiter_e11"
+  },
+  {
+   "id": "rr_arbiter_e12"
+  },
+  {
+   "id": "sample_accum_e01"
+  },
+  {
+   "id": "sample_accum_e02"
+  },
+  {
+   "id": "sample_accum_e03"
+  },
+  {
+   "id": "sample_accum_e04"
+  },
+  {
+   "id": "sample_accum_e05"
+  },
+  {
+   "id": "sample_accum_e06"
+  },
+  {
+   "id": "sample_accum_e07"
+  },
+  {
+   "id": "sample_accum_e08"
+  },
+  {
+   "id": "sample_accum_e09"
+  },
+  {
+   "id": "sample_accum_e10"
+  },
+  {
+   "id": "sample_accum_e11"
+  },
+  {
+   "id": "sample_accum_e12"
+  },
+  {
+   "id": "secded_decode_e01"
+  },
+  {
+   "id": "secded_decode_e02"
+  },
+  {
+   "id": "secded_decode_e03"
+  },
+  {
+   "id": "secded_decode_e04"
+  },
+  {
+   "id": "secded_decode_e05"
+  },
+  {
+   "id": "secded_decode_e06"
+  },
+  {
+   "id": "secded_decode_e07"
+  },
+  {
+   "id": "secded_decode_e08"
+  },
+  {
+   "id": "secded_decode_e09"
+  },
+  {
+   "id": "secded_decode_e10"
+  },
+  {
+   "id": "secded_decode_e11"
+  },
+  {
+   "id": "secded_decode_e12"
+  },
+  {
+   "id": "seq_divider_e01"
+  },
+  {
+   "id": "seq_divider_e02"
+  },
+  {
+   "id": "seq_divider_e03"
+  },
+  {
+   "id": "seq_divider_e04"
+  },
+  {
+   "id": "seq_divider_e05"
+  },
+  {
+   "id": "seq_divider_e06"
+  },
+  {
+   "id": "seq_divider_e07"
+  },
+  {
+   "id": "seq_divider_e08"
+  },
+  {
+   "id": "seq_divider_e09"
+  },
+  {
+   "id": "seq_divider_e10"
+  },
+  {
+   "id": "seq_divider_e11"
+  },
+  {
+   "id": "seq_divider_e12"
+  },
+  {
+   "id": "signal_light_e01"
+  },
+  {
+   "id": "signal_light_e02"
+  },
+  {
+   "id": "signal_light_e03"
+  },
+  {
+   "id": "signal_light_e04"
+  },
+  {
+   "id": "signal_light_e05"
+  },
+  {
+   "id": "signal_light_e06"
+  },
+  {
+   "id": "signal_light_e07"
+  },
+  {
+   "id": "signal_light_e08"
+  },
+  {
+   "id": "signal_light_e09"
+  },
+  {
+   "id": "signal_light_e10"
+  },
+  {
+   "id": "signal_light_e11"
+  },
+  {
+   "id": "signal_light_e12"
+  },
+  {
+   "id": "stack_buffer_e01"
+  },
+  {
+   "id": "stack_buffer_e02"
+  },
+  {
+   "id": "stack_buffer_e03"
+  },
+  {
+   "id": "stack_buffer_e04"
+  },
+  {
+   "id": "stack_buffer_e05"
+  },
+  {
+   "id": "stack_buffer_e06"
+  },
+  {
+   "id": "stack_buffer_e07"
+  },
+  {
+   "id": "stack_buffer_e08"
+  },
+  {
+   "id": "stack_buffer_e09"
+  },
+  {
+   "id": "stack_buffer_e10"
+  },
+  {
+   "id": "stack_buffer_e11"
+  },
+  {
+   "id": "stack_buffer_e12"
+  },
+  {
+   "id": "token_bucket_e01"
+  },
+  {
+   "id": "token_bucket_e02"
+  },
+  {
+   "id": "token_bucket_e03"
+  },
+  {
+   "id": "token_bucket_e04"
+  },
+  {
+   "id": "token_bucket_e05"
+  },
+  {
+   "id": "token_bucket_e06"
+  },
+  {
+   "id": "token_bucket_e07"
+  },
+  {
+   "id": "token_bucket_e08"
+  },
+  {
+   "id": "token_bucket_e09"
+  },
+  {
+   "id": "token_bucket_e10"
+  },
+  {
+   "id": "token_bucket_e11"
+  },
+  {
+   "id": "token_bucket_e12"
+  },
+  {
+   "id": "updown_count_e01"
+  },
+  {
+   "id": "updown_count_e02"
+  },
+  {
+   "id": "updown_count_e03"
+  },
+  {
+   "id": "updown_count_e04"
+  },
+  {
+   "id": "updown_count_e05"
+  },
+  {
+   "id": "updown_count_e06"
+  },
+  {
+   "id": "updown_count_e07"
+  },
+  {
+   "id": "updown_count_e08"
+  },
+  {
+   "id": "updown_count_e09"
+  },
+  {
+   "id": "updown_count_e10"
+  },
+  {
+   "id": "updown_count_e11"
+  },
+  {
+   "id": "updown_count_e12"
+  }
+ ]
+}
