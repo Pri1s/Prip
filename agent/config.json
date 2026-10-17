@@ -1,0 +1,10 @@
+{
+  "agent_model": "anthropic/claude-sonnet-5.5",
+  "baseline_model": "anthropic/claude-sonnet-5.5",
+  "temperature": 0.2,
+  "max_output_tokens": 8000,
+  "max_turns": 60,
+  "max_run_tokens": 1500000,
+  "max_nudges": 2,
+  "prompt_cache": true
+}

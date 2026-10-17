@@ -1,16 +1,18 @@
 IMAGE ?= rtl-debug-agent:dev
-RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
+# Containers that mount the repo never see .env (the API key): an empty file is mounted over it.
+MOUNT := -v "$(CURDIR)":/work $(if $(wildcard .env),-v "$(CURDIR)/docker/no_env":/work/.env:ro) -w /work
+RUN   := docker run --rm $(MOUNT) $(IMAGE)
 # The tool server (and later the agent loop) runs on the host, outside the sandbox.
 HOST_PY ?= .venv/bin/python
 
 .PHONY: image shell smoke corpus-check grader-validate bugs bugs-check subset subset-check mutator-test grader-test grade-check \
-        host-venv tools-test tools-check
+        host-venv tools-test tools-check agent-test agent-pilot
 
 image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
 
 shell:
-	docker run --rm -it -v "$(CURDIR)":/work -w /work $(IMAGE) bash
+	docker run --rm -it $(MOUNT) $(IMAGE) bash
 
 # Phase 1 acceptance: the FIFO passes its cocotb test, and the grader proves it equal to itself
 # and rejects two hand-edited copies.
@@ -76,3 +78,13 @@ tools-test:
 # (golden fix and unchanged submissions), then the runs are graded in the container.
 tools-check:
 	$(HOST_PY) tools/tools_check.py
+
+# Phase 6a: agent loop, single-shot baseline and OpenRouter client, against a fake API (no cost;
+# agent tests use the real tool server and sandbox).
+agent-test:
+	$(HOST_PY) -m pytest -q -p no:cacheprovider agent/test_agent.py
+
+# Phase 6a pilot: agent + baseline on the 30 dev bugs, one run each, graded, with cost projected
+# for the full eval. Spends money: needs OPENROUTER_API_KEY.
+agent-pilot:
+	$(HOST_PY) -m agent.eval --set dev --repeats 1 --out runs/pilot

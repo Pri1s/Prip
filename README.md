@@ -22,7 +22,8 @@ Everything uses free, open-source EDA tools and runs on a laptop inside Docker.
 | 3b | Frozen 180-bug eval set + 30-bug dev set, stratified by kind and depth | Done |
 | 4b | Grading flow: hidden reference testbench + bug-line localization check | Done |
 | 5 | MCP tool server: `read_file`, `write_file`, `lint`, `run_cocotb`, `submit_patch`, sandboxed | Done |
-| 6 | Agent, single-shot baseline, parallel eval runner | Planned |
+| 6a | Agent loop (OpenRouter), single-shot baseline, parallel eval runner with cost tracking | Done (live pilot not yet run) |
+| 6b | Detection scoring (exposure replay, recognition judge), McNemar report | Planned |
 | 7 | Waveform summarizer (Python prototype, then C++) | Planned |
 
 ## Quick start
@@ -45,6 +46,8 @@ make grade-check      # Phase 4b: full grading flow on every eval/dev bug, corre
 make host-venv        # host Python env for the tool server (mcp 2.3.0, pytest)
 make tools-test       # Phase 5: tool-server tests against a real sandbox (escape attempts, timeouts, budget)
 make tools-check      # Phase 5: scripted client over MCP on the 30 dev bugs, then graded (about 4 min)
+make agent-test       # Phase 6a: agent loop, baseline, OpenRouter client against a fake API (no cost)
+make agent-pilot      # Phase 6a: both arms on the 30 dev bugs, graded, cost projected (needs OPENROUTER_API_KEY; spends money)
 make shell            # interactive shell in the container, repo mounted at /work
 ```
 
@@ -201,7 +204,7 @@ smoke/         FIFO, two hand-edited bad FIFOs, cocotb test, run.sh
 docs/research/ notes on RTL bug taxonomies, bug depth vs difficulty, and contamination
 mutator/       mutation operators (pyslang), simulation checks, bug-pool generator
 bugs/          generated bug pool: <design>/<id>.v, manifest.jsonl (answer key), candidates.jsonl, REPORT.md
-agent/         placeholder for Phase 6
+agent/         run_agent.py (agent loop), baseline.py, eval.py (parallel runner), llm.py (OpenRouter), prompts.py, config.json
 ```
 
 ## Tool server and isolation (Phase 5)
@@ -245,6 +248,43 @@ grader:    container with the repo (answer key), run after the agent is done: to
 ```bash
 .venv/bin/python -m toolserver.server --bug token_bucket_07 --runs-dir runs   # one run, MCP on stdio
 docker run --rm -v "$PWD":/work -w /work rtl-debug-agent:dev python tools/grade_runs.py grade runs
+```
+
+## Agent and baseline (Phase 6a)
+
+Both arms use the same model, temperature (0.2) and inputs: the spec plus the buggy file numbered
+as `read_file` numbers it (`agent/prompts.py`). The only difference is the tool loop.
+
+- **Agent** (`agent/run_agent.py`): starts the tool server as an MCP stdio subprocess, offers its
+  five tools to the model as function tools, and feeds results back until the server says the run
+  is over (submitted / budget exhausted) or a loop cap hits: 60 LLM turns, 1.5 M tokens, 15 min,
+  two replies in a row without a tool call, or an API error the one retry didn't fix. The model's
+  text goes to `messages.jsonl`, so Phase 6b can judge whether it *recognized* the bug.
+- **Baseline** (`agent/baseline.py`): one call, no tools, JSON reply `{line, explanation,
+  patched_file, test?}`, written in the tool server's run layout so `tools/grade_runs.py` grades
+  both arms the same way. A bad reply is retried once, then the run has no submission.
+- **Runner** (`agent/eval.py`): `<out>/<arm>-<bug>-r<k>/` per run, N in parallel, resumable;
+  grades in the container, then writes `summary.json` with outcomes, tokens, cost and the cost
+  projected for the full eval (180 bugs × 3 runs per arm).
+- **API key**: `OPENROUTER_API_KEY` (from `.env` or the environment) stays on the host in the request header. It never reaches the
+  tool server, the sandbox or any run file (`make agent-test` checks this). `.env` is gitignored, excluded from the
+  Docker build context, mode 600, and hidden behind an empty file in every container that mounts the repo
+  (`repo_mount` in `toolserver/sandbox.py`, `MOUNT` in the Makefile).
+- **Cost**: Anthropic models get prompt-cache breakpoints (system prompt + newest message), so
+  each turn rereads the conversation at the cached price. Models live in `agent/config.json`.
+
+Detection is scored in Phase 6b: *exposure* (an executed test fails on buggy and passes on golden
+in a sandboxed replay), *validity* (it checks spec-defined, unmasked behavior) and *recognition*
+(the agent then names the violating behavior; judged from `messages.jsonl` by a fixed-rubric LLM
+judge from a different model family, blind to the repair verdict, checked against hand labels).
+A run that ends without a submission fails repair and localization but can still earn exposure and
+recognition.
+
+Put the key in `.env` at the repo root (gitignored; template in `.env.example`) or export it.
+
+```bash
+.venv/bin/python -m agent.run_agent --bug token_bucket_07 --runs-dir runs   # one agent run
+.venv/bin/python -m agent.eval --set dev --limit 5 --out runs/try          # small paid trial
 ```
 
 ## License

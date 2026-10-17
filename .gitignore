@@ -13,3 +13,6 @@ results.xml
 
 # VibeWise learning notes (local only)
 .vibe-wise/
+
+# Local secrets (see .env.example)
+.env
