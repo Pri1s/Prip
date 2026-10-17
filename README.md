@@ -267,7 +267,9 @@ as `read_file` numbers it (`agent/prompts.py`). The only difference is the tool 
   grades in the container, then writes `summary.json` with outcomes, tokens, cost and the cost
   projected for the full eval (180 bugs × 3 runs per arm).
 - **API key**: `OPENROUTER_API_KEY` (from `.env` or the environment) stays on the host in the request header. It never reaches the
-  tool server, the sandbox or any run file (`make agent-test` checks this).
+  tool server, the sandbox or any run file (`make agent-test` checks this). `.env` is gitignored, excluded from the
+  Docker build context, mode 600, and hidden behind an empty file in every container that mounts the repo
+  (`repo_mount` in `toolserver/sandbox.py`, `MOUNT` in the Makefile).
 - **Cost**: Anthropic models get prompt-cache breakpoints (system prompt + newest message), so
   each turn rereads the conversation at the cached price. Models live in `agent/config.json`.
 

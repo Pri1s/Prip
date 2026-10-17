@@ -1,5 +1,7 @@
 IMAGE ?= rtl-debug-agent:dev
-RUN   := docker run --rm -v "$(CURDIR)":/work -w /work $(IMAGE)
+# Containers that mount the repo never see .env (the API key): an empty file is mounted over it.
+MOUNT := -v "$(CURDIR)":/work $(if $(wildcard .env),-v "$(CURDIR)/docker/no_env":/work/.env:ro) -w /work
+RUN   := docker run --rm $(MOUNT) $(IMAGE)
 # The tool server (and later the agent loop) runs on the host, outside the sandbox.
 HOST_PY ?= .venv/bin/python
 
@@ -10,7 +12,7 @@ image:
 	docker build -f docker/Dockerfile -t $(IMAGE) .
 
 shell:
-	docker run --rm -it -v "$(CURDIR)":/work -w /work $(IMAGE) bash
+	docker run --rm -it $(MOUNT) $(IMAGE) bash
 
 # Phase 1 acceptance: the FIFO passes its cocotb test, and the grader proves it equal to itself
 # and rejects two hand-edited copies.

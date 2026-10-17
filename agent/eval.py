@@ -22,13 +22,13 @@ from pathlib import Path
 from agent.baseline import run_baseline
 from agent.llm import OpenRouter, load_config, load_env_file
 from agent.run_agent import run_agent
-from toolserver.sandbox import IMAGE, remove_leftovers
+from toolserver.sandbox import IMAGE, remove_leftovers, repo_mount
 from toolserver.server import load_bug
 
 ROOT = Path(__file__).resolve().parent.parent
 FULL_EVAL_RUNS = 180 * 3
-# Grading needs no network; the repo mount includes .env, so the container gets none.
-DOCKER = ["docker", "run", "--rm", "--network", "none", "-v", f"{ROOT}:/work", "-w", "/work", IMAGE]
+# Grading needs no network, and repo_mount hides .env from the container.
+DOCKER = ["docker", "run", "--rm", "--network", "none", *repo_mount(ROOT), IMAGE]
 
 
 def load_set(name: str) -> list[dict]:

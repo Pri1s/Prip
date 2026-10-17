@@ -74,6 +74,14 @@ class Sandbox:
         self.stop()
 
 
+def repo_mount(root: Path) -> list[str]:
+    """docker run options that mount the repo at /work for trusted containers (grading), with the
+    repo's .env (the OpenRouter API key) hidden behind an empty file. Never use for agent code."""
+    root = Path(root).resolve()
+    mask = ["-v", f"{root / 'docker' / 'no_env'}:/work/.env:ro"] if (root / ".env").exists() else []
+    return ["-v", f"{root}:/work", *mask, "-w", "/work"]
+
+
 def remove_leftovers():
     """Kills sandboxes left behind by a crashed server."""
     ids = subprocess.run(["docker", "ps", "-q", "--filter", f"label={LABEL}"],

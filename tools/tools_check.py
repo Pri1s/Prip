@@ -25,12 +25,12 @@ from mcp import Client, StdioServerParameters
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from toolserver.sandbox import IMAGE, remove_leftovers  # noqa: E402
+from toolserver.sandbox import IMAGE, remove_leftovers, repo_mount  # noqa: E402
 from toolserver.server import load_bug  # noqa: E402
 
 OUT = ROOT / "build" / "tools_check"
 RUNS = OUT / "runs"
-DOCKER = ["docker", "run", "--rm", "-v", f"{ROOT}:/work", "-w", "/work", IMAGE]
+DOCKER = ["docker", "run", "--rm", *repo_mount(ROOT), IMAGE]
 PARALLEL = 4
 
 
