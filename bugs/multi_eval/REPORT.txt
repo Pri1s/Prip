@@ -1,0 +1,17 @@
+bcd_sum          accepted 12/12  tries 12  {'accepted': 12}
+clock_counter    accepted 12/12  tries 13  {'accepted': 12, 'stillborn': 1}
+    try07 ['clock_counter_02', 'clock_counter_09', 'clock_counter_37']: stillborn: yosys check failed (multiple drivers, undriven wire, logic loop, or comb/seq kind change)
+mag_compare      accepted 12/12  tries 12  {'accepted': 12}
+op_unit          accepted 12/12  tries 12  {'accepted': 12}
+pack_8to16       accepted 12/12  tries 12  {'accepted': 12}
+pattern_watch    accepted 12/12  tries 12  {'accepted': 12}
+rotate_shift     accepted 12/12  tries 12  {'accepted': 12}
+rr_arbiter       accepted 12/12  tries 12  {'accepted': 12}
+sample_accum     accepted 12/12  tries 12  {'accepted': 12}
+secded_decode    accepted 12/12  tries 12  {'accepted': 12}
+seq_divider      accepted 12/12  tries 12  {'accepted': 12}
+signal_light     accepted 12/12  tries 13  {'accepted': 12, 'rejected_simsynth_disagree': 1}
+    try07 ['signal_light_32', 'signal_light_39', 'signal_light_68']: rejected_simsynth_disagree: mutant RTL and its netlist disagree in simulation (390 cycles)
+stack_buffer     accepted 12/12  tries 12  {'accepted': 12}
+token_bucket     accepted 12/12  tries 12  {'accepted': 12}
+updown_count     accepted 12/12  tries 12  {'accepted': 12}

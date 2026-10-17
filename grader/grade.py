@@ -37,19 +37,18 @@ from grader.ref_runner import REF_TIMEOUT, run_reference_isolated
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "bugs" / "manifest.jsonl"
-MULTI_MANIFEST = ROOT / "bugs" / "multi" / "manifest.jsonl"
 COMMENTS = re.compile(r"//[^\n]*|/\*.*?\*/", re.S)
 
 
 def load_bug(bug_id: str) -> dict:
-    """A bug from the single-bug pool or the Phase 6c multi-bug variants."""
-    for manifest in (MANIFEST, MULTI_MANIFEST):
+    """A bug from the single-bug pool or the Phase 6c multi-bug variants (bugs/multi*/)."""
+    for manifest in (MANIFEST, *sorted((ROOT / "bugs").glob("multi*/manifest.jsonl"))):
         if not manifest.exists():
             continue
         for line in manifest.read_text().splitlines():
             if line.strip() and (bug := json.loads(line))["id"] == bug_id:
                 return bug
-    raise KeyError(f"no bug {bug_id!r} in {MANIFEST} or {MULTI_MANIFEST}")
+    raise KeyError(f"no bug {bug_id!r} in {MANIFEST} or bugs/multi*/")
 
 
 def _line_of(text: str, offset: int) -> int:

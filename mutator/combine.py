@@ -11,9 +11,12 @@ patch passes only when all three bugs are fixed. A claimed line counts as exact 
 component's exact line (block likewise); the manifest stores both per component, in the variant's
 own line numbering.
 
-Writes bugs/multi/<design>/<id>.v, bugs/multi/manifest.jsonl (answer key) and
-bugs/multi/probe_set.json (all variants: 2 per design, seeded). Runs inside the container
-(`make bugs-multi`).
+Two sets, each in its own directory with its own manifest (answer key):
+  probe (default)  bugs/multi/       2 per design, seed 20261017, probe_set.json  (`make bugs-multi`)
+  eval             bugs/multi_eval/  12 per design, a new seed, eval_set.json     (`make bugs-multi-eval`)
+The eval set is fresh: its components exclude every single bug used in the probe or in the dev
+set (both were already run by a model), and a single bug appears in at most 2 eval variants.
+Runs inside the container.
 """
 
 import argparse
@@ -35,12 +38,12 @@ from mutator.generate import _gates, depth_bin, provenance  # noqa: E402
 from mutator.operators import line_of  # noqa: E402
 
 BUGS = ROOT / "bugs"
-OUT = BUGS / "multi"
 BUILD = ROOT / "build" / "bugs_multi"
-SEED = 20261017
 K = 3
-PER_DESIGN = 2
-MAX_TRIES = 12
+SETS = {  # name: (directory, id letter, seed, variants per design, max uses of one single bug)
+    "probe": ("multi", "m", 20261017, 2, None),
+    "eval": ("multi_eval", "e", 20261018, 12, 2),
+}
 
 
 def apply_edits(golden: str, comps: list[dict]) -> str:
@@ -94,25 +97,28 @@ def localization(golden: str, combined: str, comps: list[dict]) -> list[dict]:
 
 def try_design(task) -> dict:
     """Draws triples for one design until PER_DESIGN are accepted (or MAX_TRIES run out)."""
-    design, comps_pool = task
+    design, comps_pool, name, seed, per_design, max_uses = task
     design_dir = ROOT / "designs" / design
     meta = json.loads((design_dir / "meta.json").read_text())
     golden_rtl = design_dir / "golden.v"
     golden = golden_rtl.read_text()
-    rng = random.Random(f"{SEED}:{design}")
-    accepted, tried, seen = [], [], set()
-    for n in range(MAX_TRIES):
-        if len(accepted) == PER_DESIGN:
+    rng = random.Random(f"{seed}:{design}")
+    accepted, tried, seen, uses = [], [], set(), {}
+    for n in range(max(12, per_design * 3)):
+        if len(accepted) == per_design:
+            break
+        avail = comps_pool if max_uses is None else [c for c in comps_pool if uses.get(c["id"], 0) < max_uses]
+        if len(avail) < K:
             break
         for _ in range(200):
-            comps = sorted(rng.sample(comps_pool, K), key=lambda c: c["id"])
+            comps = sorted(rng.sample(avail, K), key=lambda c: c["id"])
             key = tuple(c["id"] for c in comps)
             if key not in seen and compatible(comps):
                 break
         else:
             break
         seen.add(key)
-        work = BUILD / design / f"try{n:02d}"
+        work = BUILD / name / design / f"try{n:02d}"
         shutil.rmtree(work, ignore_errors=True)
         work.mkdir(parents=True)
         mutant = work / f"{meta['top']}.v"
@@ -140,6 +146,8 @@ def try_design(task) -> dict:
             rec["localization"] = localization(golden, combined, comps)
             rec["buggy"] = combined
             accepted.append(rec)
+            for c in key:
+                uses[c] = uses.get(c, 0) + 1
         shutil.rmtree(work, ignore_errors=True)
     return {"design": design, "meta": meta, "golden": golden, "accepted": accepted, "tried": tried}
 
@@ -147,24 +155,33 @@ def try_design(task) -> dict:
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("designs", nargs="*")
+    ap.add_argument("--set", choices=sorted(SETS), default="probe")
     a = ap.parse_args()
+    dirname, letter, seed, per_design, max_uses = SETS[a.set]
+    out_dir = BUGS / dirname
     pool = [json.loads(l) for l in (BUGS / "manifest.jsonl").read_text().splitlines() if l.strip()]
+    excluded = set()
+    if a.set == "eval":   # fresh: no single bug a model has already seen
+        excluded |= {b["id"] for b in json.loads((BUGS / "dev_set.json").read_text())["bugs"]}
+        excluded |= {c["bug"] for l in (BUGS / "multi" / "manifest.jsonl").read_text().splitlines()
+                     for c in json.loads(l)["components"]}
     by_design = {}
     for b in pool:
-        by_design.setdefault(b["design"], []).append(b)
+        if b["id"] not in excluded:
+            by_design.setdefault(b["design"], []).append(b)
     names = a.designs or sorted(by_design)
-    shutil.rmtree(OUT, ignore_errors=True)
-    OUT.mkdir(parents=True)
+    shutil.rmtree(out_dir, ignore_errors=True)
+    out_dir.mkdir(parents=True)
     prov = provenance()
     with ProcessPoolExecutor() as ex:
-        results = list(ex.map(try_design, [(d, by_design[d]) for d in names]))
+        results = list(ex.map(try_design, [(d, by_design[d], a.set, seed, per_design, max_uses) for d in names]))
 
     manifest, report = [], []
     for res in results:
         d, meta, golden = res["design"], res["meta"], res["golden"]
         for i, rec in enumerate(res["accepted"], 1):
-            bid = f"{d}_m{i:02d}"
-            path = OUT / d / f"{bid}.v"
+            bid = f"{d}_{letter}{i:02d}"
+            path = out_dir / d / f"{bid}.v"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(rec["buggy"])
             manifest.append({
@@ -175,22 +192,25 @@ def main():
                 "reference_test_detected": rec["reference_test_detected"],
                 "golden_sha256": hashlib.sha256(golden.encode()).hexdigest(),
                 "buggy_sha256": hashlib.sha256(rec["buggy"].encode()).hexdigest(),
-                "provenance": {**prov, "seed": SEED, "k": K},
+                "provenance": {**prov, "seed": seed, "k": K, "set": a.set},
             })
         outcomes = {}
         for t in res["tried"]:
             outcomes[t["outcome"]] = outcomes.get(t["outcome"], 0) + 1
-        report.append(f"{d:<16} accepted {len(res['accepted'])}/{PER_DESIGN}  tries {len(res['tried'])}  {outcomes}")
+        report.append(f"{d:<16} accepted {len(res['accepted'])}/{per_design}  tries {len(res['tried'])}  {outcomes}")
         for t in res["tried"]:
             if t["outcome"] not in ("accepted",) and t.get("reason"):
                 report.append(f"    try{t['try']:02d} {t['components']}: {t['outcome']}: {t['reason'][:160]}")
 
-    (OUT / "manifest.jsonl").write_text("".join(json.dumps(x) + "\n" for x in sorted(manifest, key=lambda x: x["id"])))
-    (OUT / "probe_set.json").write_text(json.dumps({"seed": SEED, "k": K, "set": "probe-multi", "size": len(manifest),
-                                                    "bugs": [{"id": x["id"]} for x in manifest]}, indent=1) + "\n")
-    (OUT / "REPORT.txt").write_text("\n".join(report) + "\n")
+    text = "".join(json.dumps(x) + "\n" for x in sorted(manifest, key=lambda x: x["id"]))
+    (out_dir / "manifest.jsonl").write_text(text)
+    (out_dir / f"{a.set}_set.json").write_text(json.dumps({
+        "seed": seed, "k": K, "set": f"{a.set}-multi", "size": len(manifest),
+        "manifest_sha256": hashlib.sha256(text.encode()).hexdigest(), "excluded_single_bugs": len(excluded),
+        "bugs": [{"id": x["id"]} for x in sorted(manifest, key=lambda x: x["id"])]}, indent=1) + "\n")
+    (out_dir / "REPORT.txt").write_text("\n".join(report) + "\n")
     print("\n".join(report))
-    print(f"\n{len(manifest)} three-bug variants -> {OUT.relative_to(ROOT)}")
+    print(f"\n{len(manifest)} three-bug variants -> {out_dir.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
